@@ -1,0 +1,125 @@
+import { getDb } from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET(req: NextRequest) {
+  try {
+    const db = getDb();
+    const { searchParams } = new URL(req.url);
+    const type = searchParams.get('type') ?? 'test-cases';
+    const moduleId = searchParams.get('moduleId');
+    const featureId = searchParams.get('featureId');
+    const lifecycle = searchParams.get('lifecycle') ?? 'active';
+
+    if (type === 'template') {
+      // Return CSV template
+      const headers = [
+        'Module ID', 'Feature ID', 'Requirement Ref', 'Title', 'Test Type',
+        'Preconditions', 'Test Steps', 'Test Data', 'Expected Result', 'Priority', 'Notes'
+      ].join(',');
+      const example = [
+        '1', '1', 'REQ-001', 'Login berhasil dengan kredensial valid', 'functional',
+        'User berada di halaman login', '1. Buka halaman login\n2. Masukkan username\n3. Masukkan password\n4. Klik Login',
+        'username: admin, password: Pass123!', 'User berhasil login dan diarahkan ke dashboard', 'high', ''
+      ].map(v => `"${v}"`).join(',');
+      const csv = headers + '\n' + example;
+
+      return new NextResponse(csv, {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="qa_template.csv"'
+        }
+      });
+    }
+
+    const conditions: string[] = [];
+    const params: (string | number)[] = [];
+
+    if (lifecycle !== 'all') conditions.push(`tc.lifecycle_status = '${lifecycle}'`);
+    if (moduleId) { conditions.push('tc.module_id = ?'); params.push(Number(moduleId)); }
+    if (featureId) { conditions.push('tc.feature_id = ?'); params.push(Number(featureId)); }
+
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    if (type === 'test-cases') {
+      const rows = db.prepare(`
+        SELECT tc.case_id, m.name as module, f.name as feature, tc.requirement_ref,
+          tc.title, tc.test_type, tc.preconditions, tc.test_steps, tc.test_data,
+          tc.expected_result, tc.actual_result, tc.priority, tc.prep_status,
+          tc.exec_status, tc.latest_result, tc.defect_ref, tc.notes,
+          tc.lifecycle_status, tc.created_at, tc.updated_at
+        FROM test_cases tc
+        JOIN modules m ON m.id = tc.module_id
+        JOIN features f ON f.id = tc.feature_id
+        ${where}
+        ORDER BY tc.case_id
+      `).all(...params) as Record<string, unknown>[];
+
+      const csv = toCSV(rows);
+      return new NextResponse(csv, {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="test_cases_${new Date().toISOString().split('T')[0]}.csv"`
+        }
+      });
+    }
+
+    if (type === 'executions') {
+      const rows = db.prepare(`
+        SELECT tc.case_id, m.name as module, f.name as feature, tc.title,
+          e.exec_date, e.environment, e.result, e.actual_result, e.defect_ref, e.notes, e.is_retest
+        FROM executions e
+        JOIN test_cases tc ON tc.id = e.test_case_id
+        JOIN modules m ON m.id = tc.module_id
+        JOIN features f ON f.id = tc.feature_id
+        ORDER BY e.exec_date DESC
+      `).all() as Record<string, unknown>[];
+
+      const csv = toCSV(rows);
+      return new NextResponse(csv, {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="executions_${new Date().toISOString().split('T')[0]}.csv"`
+        }
+      });
+    }
+
+    if (type === 'change-log') {
+      const rows = db.prepare(`
+        SELECT entity_type, entity_id, entity_ref, change_type, changed_fields, 
+          old_values, new_values, reason, requirement_ref, changed_at
+        FROM change_log ORDER BY changed_at DESC
+      `).all() as Record<string, unknown>[];
+
+      const csv = toCSV(rows);
+      return new NextResponse(csv, {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="change_log_${new Date().toISOString().split('T')[0]}.csv"`
+        }
+      });
+    }
+
+    return NextResponse.json({ error: 'Invalid export type' }, { status: 400 });
+  } catch (error) {
+    console.error('Export error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+function toCSV(rows: Record<string, unknown>[]): string {
+  if (!rows.length) return '';
+  const headers = Object.keys(rows[0]);
+  const escape = (val: unknown) => {
+    const s = val == null ? '' : String(val);
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+  return [
+    headers.join(','),
+    ...rows.map(row => headers.map(h => escape(row[h])).join(','))
+  ].join('\n');
+}
