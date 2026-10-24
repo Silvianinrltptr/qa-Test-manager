@@ -1,10 +1,14 @@
 import { getDb, logActivity, logChange } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa', 'dev_pm']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const { searchParams } = new URL(req.url);
     const includeArchived = searchParams.get('includeArchived') === 'true';
@@ -30,12 +34,15 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const body = await req.json();
     const { name, description, prefix } = body;
 
     if (!name?.trim() || !prefix?.trim()) {
-      return NextResponse.json({ error: 'Nama dan prefix wajib diisi' }, { status: 400 });
+      return NextResponse.json({ error: 'Name and prefix are required' }, { status: 400 });
     }
 
     const prefixUpper = prefix.trim().toUpperCase();
@@ -43,7 +50,7 @@ export async function POST(req: NextRequest) {
     // Check unique prefix
     const existing = db.prepare('SELECT id FROM modules WHERE prefix = ?').get(prefixUpper);
     if (existing) {
-      return NextResponse.json({ error: 'Prefix sudah digunakan' }, { status: 409 });
+      return NextResponse.json({ error: 'Prefix is already in use' }, { status: 409 });
     }
 
     const result = db.prepare(`
@@ -53,14 +60,14 @@ export async function POST(req: NextRequest) {
 
     const moduleId = result.lastInsertRowid as number;
 
-    logActivity(db, 'created', 'module', moduleId, prefixUpper, `Modul "${name}" dibuat`);
+    logActivity(db, 'created', 'module', moduleId, prefixUpper, `Module "${name}" created`);
     logChange(db, {
       entityType: 'module', entityId: moduleId, entityRef: prefixUpper,
       changeType: 'created', newValues: { name, description, prefix: prefixUpper }
     });
 
-    const module = db.prepare('SELECT * FROM modules WHERE id = ?').get(moduleId);
-    return NextResponse.json(module, { status: 201 });
+    const newModule = db.prepare('SELECT * FROM modules WHERE id = ?').get(moduleId);
+    return NextResponse.json(newModule, { status: 201 });
   } catch (error) {
     console.error('Modules POST error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

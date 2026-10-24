@@ -1,10 +1,14 @@
 import { getDb, logActivity, logChange } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa', 'dev_pm']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const { searchParams } = new URL(req.url);
     const moduleId = searchParams.get('moduleId');
@@ -60,12 +64,15 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const body = await req.json();
     const { module_id, feature_id, ref_id, title, description, status = 'active' } = body;
 
     if (!title?.trim()) {
-      return NextResponse.json({ error: 'Judul requirement wajib diisi' }, { status: 400 });
+      return NextResponse.json({ error: 'Requirement title is required' }, { status: 400 });
     }
 
     // Auto-generate ref_id if not provided
@@ -98,14 +105,14 @@ export async function POST(req: NextRequest) {
     `).run(newId, title.trim(), description?.trim() || null);
 
     // Log activity and change
-    logActivity(db, 'create_requirement', 'requirement', newId, finalRefId, `Membuat requirement baru: ${finalRefId} - ${title.trim()}`);
+    logActivity(db, 'create_requirement', 'requirement', newId, finalRefId, `Created new requirement: ${finalRefId} - ${title.trim()}`);
     logChange(db, {
       entityType: 'requirement',
       entityId: newId,
       entityRef: finalRefId,
       changeType: 'created',
       newValues: { title, ref_id: finalRefId, description, status },
-      reason: 'Requirement dibuat'
+      reason: 'Requirement created'
     });
 
     return NextResponse.json({ id: newId, ref_id: finalRefId, success: true }, { status: 201 });

@@ -1,8 +1,12 @@
 import { getDb, logActivity, logChange } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
-export async function GET(_req: NextRequest, ctx: RouteContext<'/api/test-cases/[id]'>) {
+export async function GET(req: NextRequest, ctx: RouteContext<'/api/test-cases/[id]'>) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa', 'dev_pm']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const { id } = await ctx.params;
 
@@ -24,7 +28,11 @@ export async function GET(_req: NextRequest, ctx: RouteContext<'/api/test-cases/
       SELECT * FROM change_log WHERE entity_type = 'test_case' AND entity_id = ? ORDER BY changed_at DESC
     `).all(Number(id));
 
-    return NextResponse.json({ testCase: tc, executions, changes });
+    const comments = db.prepare(`
+      SELECT * FROM test_case_comments WHERE test_case_id = ? ORDER BY created_at ASC
+    `).all(Number(id));
+
+    return NextResponse.json({ testCase: tc, executions, changes, comments });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -33,6 +41,9 @@ export async function GET(_req: NextRequest, ctx: RouteContext<'/api/test-cases/
 
 export async function PUT(req: NextRequest, ctx: RouteContext<'/api/test-cases/[id]'>) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const { id } = await ctx.params;
     const body = await req.json();
@@ -91,7 +102,7 @@ export async function PUT(req: NextRequest, ctx: RouteContext<'/api/test-cases/[
       });
     }
 
-    logActivity(db, 'updated', 'test_case', Number(id), old.case_id as string, `Test case "${old.title}" diperbarui`);
+    logActivity(db, 'updated', 'test_case', Number(id), old.case_id as string, `Test case "${old.title}" updated`);
 
     const updated = db.prepare(`
       SELECT tc.*, m.name as module_name, m.prefix as module_prefix, f.name as feature_name
@@ -108,8 +119,11 @@ export async function PUT(req: NextRequest, ctx: RouteContext<'/api/test-cases/[
   }
 }
 
-export async function DELETE(_req: NextRequest, ctx: RouteContext<'/api/test-cases/[id]'>) {
+export async function DELETE(req: NextRequest, ctx: RouteContext<'/api/test-cases/[id]'>) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const { id } = await ctx.params;
 
@@ -118,7 +132,7 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext<'/api/test-cas
 
     // Soft delete - mark as archived
     db.prepare(`UPDATE test_cases SET lifecycle_status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(Number(id));
-    logActivity(db, 'archived', 'test_case', Number(id), tc.case_id, `Test case "${tc.title}" diarsipkan`);
+    logActivity(db, 'archived', 'test_case', Number(id), tc.case_id, `Test case "${tc.title}" archived`);
     logChange(db, {
       entityType: 'test_case', entityId: Number(id), entityRef: tc.case_id,
       changeType: 'archived', oldValues: { lifecycle_status: tc.lifecycle_status }

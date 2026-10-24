@@ -2,21 +2,79 @@
 
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ResultBadge, PriorityBadge, LoadingSpinner, EmptyState, ProgressBar } from '@/components/ui/Shared';
 import { Network, CheckCircle2, AlertTriangle, XCircle, Search, Layers, Sparkles, ExternalLink, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
-import type { Module } from '@/lib/types';
+import type { Module, TestResult, Priority, TestType } from '@/lib/types';
+
+interface TraceabilityExecution {
+  id: number;
+  test_case_id: number;
+  exec_date: string;
+  environment: string | null;
+  result: TestResult;
+  defect_ref: string | null;
+}
+
+interface TraceabilityTestCase {
+  id: number;
+  case_id: string;
+  title: string;
+  test_type: TestType;
+  priority: Priority;
+  latest_result: TestResult;
+  executions?: TraceabilityExecution[];
+  hasExecutions?: boolean;
+}
+
+interface TraceabilityRequirement {
+  id: number;
+  ref_id: string;
+  title: string;
+  description: string | null;
+  change_type: string;
+  status: string;
+  version: number;
+  testCases: TraceabilityTestCase[];
+  isCovered: boolean;
+}
+
+interface TraceabilityFeature {
+  id: number;
+  name: string;
+  requirements: TraceabilityRequirement[];
+  unlinkedCases?: TraceabilityTestCase[];
+}
+
+interface TraceabilityModule {
+  id: number;
+  name: string;
+  prefix: string;
+  features: TraceabilityFeature[];
+}
+
+interface TraceabilityStats {
+  totalRequirements: number;
+  coveredRequirements: number;
+  uncoveredRequirements: number;
+  reqCoveragePct: number;
+  totalTestCases: number;
+  casesWithRequirement: number;
+  casesWithoutRequirement: number;
+  casesExecuted: number;
+  executionCoveragePct: number;
+}
 
 export default function TraceabilityPage() {
-  const [matrix, setMatrix] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
+  const [matrix, setMatrix] = useState<TraceabilityModule[]>([]);
+  const [stats, setStats] = useState<TraceabilityStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [modules, setModules] = useState<Module[]>([]);
   const [selectedModule, setSelectedModule] = useState('');
   const [filterCoverage, setFilterCoverage] = useState<'all' | 'uncovered' | 'covered'>('all');
 
   const fetchTraceability = async () => {
-    setLoading(true);
     try {
       const params = new URLSearchParams({
         ...(selectedModule && { moduleId: selectedModule }),
@@ -42,63 +100,64 @@ export default function TraceabilityPage() {
 
   return (
     <AppShell>
-      <div className="page-header">
+      <header className="page-header main-header">
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Network size={20} style={{ color: 'var(--primary)' }} />
-            Traceability Matrix (Matriks Keterlacakan)
+            Traceability Matrix
           </h1>
           <p className="page-subtitle">
-            Hubungan end-to-end: Modul → Fitur → Requirement → Test Case → Riwayat Eksekusi
+            End-to-end trace: Module → Feature → Requirement → Test Case → Execution History
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-secondary" onClick={fetchTraceability}>
             <RefreshCw size={14} /> Refresh
           </button>
+          <ThemeToggle />
         </div>
-      </div>
+      </header>
 
       {/* Coverage Statistics */}
       {stats && (
         <div className="grid-3" style={{ marginBottom: 24 }}>
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="metric-label">Cakupan Requirement</span>
+              <span className="metric-label">Requirement Coverage</span>
               <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{stats.reqCoveragePct}%</span>
             </div>
             <ProgressBar value={stats.coveredRequirements} max={stats.totalRequirements} color="primary" />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--foreground-muted)', marginTop: 8 }}>
-              <span>{stats.coveredRequirements} tercakup</span>
+              <span>{stats.coveredRequirements} covered</span>
               <span style={{ color: stats.uncoveredRequirements > 0 ? 'var(--warning)' : 'inherit' }}>
-                {stats.uncoveredRequirements} belum ada test case
+                {stats.uncoveredRequirements} without test cases
               </span>
             </div>
           </div>
 
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="metric-label">Keterikatan Test Case ke PRD</span>
+              <span className="metric-label">Test Case to Requirement Linkage</span>
               <span style={{ fontWeight: 700, color: 'var(--accent)' }}>
                 {stats.totalTestCases > 0 ? Math.round((stats.casesWithRequirement / stats.totalTestCases) * 100) : 0}%
               </span>
             </div>
             <ProgressBar value={stats.casesWithRequirement} max={stats.totalTestCases} color="primary" />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--foreground-muted)', marginTop: 8 }}>
-              <span>{stats.casesWithRequirement} terhubung ke REQ</span>
-              <span>{stats.casesWithoutRequirement} tanpa ref REQ</span>
+              <span>{stats.casesWithRequirement} linked to REQ</span>
+              <span>{stats.casesWithoutRequirement} without REQ ref</span>
             </div>
           </div>
 
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="metric-label">Cakupan Eksekusi</span>
+              <span className="metric-label">Execution Coverage</span>
               <span style={{ fontWeight: 700, color: 'var(--success)' }}>{stats.executionCoveragePct}%</span>
             </div>
             <ProgressBar value={stats.casesExecuted} max={stats.totalTestCases} color="success" />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--foreground-muted)', marginTop: 8 }}>
-              <span>{stats.casesExecuted} pernah dieksekusi</span>
-              <span>{stats.totalTestCases - stats.casesExecuted} belum dieksekusi</span>
+              <span>{stats.casesExecuted} executed</span>
+              <span>{stats.totalTestCases - stats.casesExecuted} unexecuted</span>
             </div>
           </div>
         </div>
@@ -113,7 +172,7 @@ export default function TraceabilityPage() {
             value={selectedModule}
             onChange={e => setSelectedModule(e.target.value)}
           >
-            <option value="">Semua Modul</option>
+            <option value="">All Modules</option>
             {modules.map(m => (
               <option key={m.id} value={m.id}>{m.name}</option>
             ))}
@@ -123,11 +182,11 @@ export default function TraceabilityPage() {
             className="form-control"
             style={{ width: 200 }}
             value={filterCoverage}
-            onChange={e => setFilterCoverage(e.target.value as any)}
+            onChange={e => setFilterCoverage(e.target.value as 'all' | 'uncovered' | 'covered')}
           >
-            <option value="all">Semua Requirement</option>
-            <option value="uncovered">Hanya yang Belum Tercakup (0 Case)</option>
-            <option value="covered">Hanya yang Tercakup (&gt;0 Case)</option>
+            <option value="all">All Requirements</option>
+            <option value="uncovered">Uncovered Only (0 Cases)</option>
+            <option value="covered">Covered Only (&gt;0 Cases)</option>
           </select>
         </div>
       </div>
@@ -138,8 +197,8 @@ export default function TraceabilityPage() {
       ) : matrix.length === 0 ? (
         <EmptyState
           icon={<Network size={32} />}
-          title="Belum ada data traceability"
-          description="Tambahkan modul, fitur, requirement, dan test case untuk melihat hubungan keterlacakan."
+          title="No traceability data yet"
+          description="Add modules, features, requirements, and test cases to view traceability links."
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -159,7 +218,7 @@ export default function TraceabilityPage() {
                   <span style={{ fontSize: 16, fontWeight: 700 }}>{mod.name}</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
-                  {mod.features?.length || 0} Fitur
+                  {mod.features?.length || 0} {mod.features?.length === 1 ? 'Feature' : 'Features'}
                 </div>
               </div>
 
@@ -167,11 +226,11 @@ export default function TraceabilityPage() {
               <div style={{ padding: '16px 20px' }}>
                 {mod.features?.length === 0 ? (
                   <div style={{ fontSize: 13, color: 'var(--foreground-muted)', fontStyle: 'italic', padding: 8 }}>
-                    Belum ada fitur di modul ini.
+                    No features in this module yet.
                   </div>
                 ) : (
-                  mod.features.map((feat: any) => {
-                    const reqList = (feat.requirements || []).filter((r: any) => {
+                  mod.features.map(feat => {
+                    const reqList = (feat.requirements || []).filter(r => {
                       if (filterCoverage === 'uncovered') return !r.isCovered;
                       if (filterCoverage === 'covered') return r.isCovered;
                       return true;
@@ -180,17 +239,17 @@ export default function TraceabilityPage() {
                     return (
                       <div key={feat.id} style={{ marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)', marginBottom: 12 }}>
-                          📁 Fitur: {feat.name}
+                          📁 Feature: {feat.name}
                         </div>
 
                         {reqList.length === 0 && feat.unlinkedCases?.length === 0 ? (
                           <div style={{ fontSize: 12, color: 'var(--foreground-muted)', fontStyle: 'italic', paddingLeft: 12 }}>
-                            Tidak ada requirement atau test case yang cocok dengan filter ini.
+                            No requirements or test cases match this filter.
                           </div>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                             {/* Requirements in feature */}
-                            {reqList.map((req: any) => (
+                            {reqList.map(req => (
                               <div key={req.id} style={{
                                 background: 'var(--surface-2)',
                                 borderRadius: 8,
@@ -218,7 +277,7 @@ export default function TraceabilityPage() {
                                   <div>
                                     {req.isCovered ? (
                                       <span className="badge badge-success" style={{ fontSize: 11 }}>
-                                        ✓ {req.testCases?.length} Case Linked
+                                        ✓ {req.testCases?.length} Case{req.testCases?.length === 1 ? '' : 's'} Linked
                                       </span>
                                     ) : (
                                       <Link
@@ -239,15 +298,15 @@ export default function TraceabilityPage() {
                                       <thead>
                                         <tr>
                                           <th style={{ width: 110 }}>Test Case ID</th>
-                                          <th>Judul Test Case</th>
-                                          <th style={{ width: 90 }}>Tipe</th>
-                                          <th style={{ width: 90 }}>Prioritas</th>
-                                          <th style={{ width: 110 }}>Hasil Terakhir</th>
-                                          <th>Eksekusi Terakhir</th>
+                                          <th>Test Case Title</th>
+                                          <th style={{ width: 90 }}>Type</th>
+                                          <th style={{ width: 90 }}>Priority</th>
+                                          <th style={{ width: 110 }}>Latest Result</th>
+                                          <th>Latest Execution</th>
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {req.testCases.map((tc: any) => (
+                                        {req.testCases.map(tc => (
                                           <tr key={tc.id}>
                                             <td><code style={{ fontSize: 12 }}>{tc.case_id}</code></td>
                                             <td>
@@ -262,7 +321,7 @@ export default function TraceabilityPage() {
                                             <td>
                                               {tc.executions && tc.executions.length > 0 ? (
                                                 <div style={{ fontSize: 11, color: 'var(--foreground-muted)' }}>
-                                                  {new Date(tc.executions[0].exec_date).toLocaleDateString('id-ID')}
+                                                  {new Date(tc.executions[0].exec_date).toLocaleDateString('en-US')}
                                                   {tc.executions[0].environment && ` (${tc.executions[0].environment})`}
                                                   {tc.executions[0].defect_ref && (
                                                     <span style={{ color: 'var(--error)', marginLeft: 6, fontWeight: 600 }}>
@@ -271,7 +330,7 @@ export default function TraceabilityPage() {
                                                   )}
                                                 </div>
                                               ) : (
-                                                <span style={{ fontSize: 11, color: 'var(--foreground-dim)' }}>Belum dieksekusi</span>
+                                                <span style={{ fontSize: 11, color: 'var(--foreground-dim)' }}>Not executed yet</span>
                                               )}
                                             </td>
                                           </tr>
@@ -287,10 +346,10 @@ export default function TraceabilityPage() {
                             {filterCoverage !== 'uncovered' && feat.unlinkedCases && feat.unlinkedCases.length > 0 && (
                               <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: 8 }}>
                                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground-muted)', marginBottom: 8 }}>
-                                  Test Case tanpa tautan Requirement spesifik:
+                                  Test cases without specific requirement link:
                                 </div>
                                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                  {feat.unlinkedCases.map((tc: any) => (
+                                  {feat.unlinkedCases.map(tc => (
                                     <Link
                                       key={tc.id}
                                       href={`/test-cases?search=${encodeURIComponent(tc.case_id)}`}

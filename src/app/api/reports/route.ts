@@ -1,10 +1,14 @@
 import { getDb } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa', 'dev_pm']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const { searchParams } = new URL(req.url);
 
@@ -74,7 +78,23 @@ export async function GET(req: NextRequest) {
       LEFT JOIN features f ON f.id = tc.feature_id
       ${execWhere}
       ORDER BY e.exec_date DESC
-    `).all(...execParams) as any[];
+    `).all(...execParams) as {
+      id: number;
+      test_case_id: number;
+      exec_date: string;
+      environment: string | null;
+      actual_result: string | null;
+      result: string;
+      defect_ref: string | null;
+      notes: string | null;
+      is_retest: number;
+      case_id: string;
+      title: string;
+      priority: string;
+      requirement_ref: string | null;
+      module_name: string | null;
+      feature_name: string | null;
+    }[];
 
     // Calculate period results
     let passCount = 0;
@@ -102,7 +122,12 @@ export async function GET(req: NextRequest) {
         SUM(CASE WHEN entity_type = 'requirement' THEN 1 ELSE 0 END) as req_changes
       FROM change_log
       WHERE DATE(changed_at) >= DATE(?) AND DATE(changed_at) <= DATE(?)
-    `).get(startDate, endDate) as any;
+    `).get(startDate, endDate) as {
+      tc_created: number | null;
+      tc_updated: number | null;
+      tc_obsolete: number | null;
+      req_changes: number | null;
+    } | undefined;
 
     // 4. Defects reported during period
     const defects = periodExecutions

@@ -1,10 +1,14 @@
 import { getDb } from '@/lib/db';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa', 'dev_pm']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
 
     // Total active test cases

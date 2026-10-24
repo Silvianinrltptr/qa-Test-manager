@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useToast } from '@/components/ui/Toast';
 import { Plus, Trash2, Copy, Save, Upload, Download, AlertTriangle } from 'lucide-react';
 import type { Module, Feature } from '@/lib/types';
@@ -70,7 +71,7 @@ export default function BulkAddPage() {
       module_id: defaultModuleId || r.module_id,
       feature_id: defaultFeatureId || r.feature_id,
     })));
-    toast.info('Default modul/fitur diterapkan ke semua baris');
+    toast.info('Default module/feature applied to all rows');
   };
 
   // Paste from Excel
@@ -98,7 +99,7 @@ export default function BulkAddPage() {
 
     if (newRows.length > 0) {
       setRows(prev => [...prev.filter(r => r.title || r.expected_result), ...newRows]);
-      toast.success(`${newRows.length} baris ditempel dari clipboard`);
+      toast.success(`${newRows.length} row${newRows.length === 1 ? '' : 's'} pasted from clipboard`);
     }
     e.preventDefault();
   };
@@ -106,16 +107,16 @@ export default function BulkAddPage() {
   const validate = () => {
     let valid = true;
     setRows(prev => prev.map(r => {
-      if (!r.title.trim()) { valid = false; return { ...r, _error: 'Judul wajib diisi' }; }
-      if (!r.module_id) { valid = false; return { ...r, _error: 'Pilih modul' }; }
-      if (!r.feature_id) { valid = false; return { ...r, _error: 'Pilih fitur' }; }
+      if (!r.title.trim()) { valid = false; return { ...r, _error: 'Title is required' }; }
+      if (!r.module_id) { valid = false; return { ...r, _error: 'Select module' }; }
+      if (!r.feature_id) { valid = false; return { ...r, _error: 'Select feature' }; }
       return { ...r, _error: undefined };
     }));
     return valid;
   };
 
   const saveAll = async () => {
-    if (!validate()) { toast.error('Perbaiki error pada tabel'); return; }
+    if (!validate()) { toast.error('Please fix errors in the table'); return; }
     setSaving(true);
     try {
       const cases = rows.map(r => ({
@@ -132,18 +133,18 @@ export default function BulkAddPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        toast.success(`${data.succeeded} test case berhasil disimpan`);
-        if (data.failed > 0) toast.warning(`${data.failed} gagal`);
+        toast.success(`${data.succeeded} test case${data.succeeded === 1 ? '' : 's'} saved successfully`);
+        if (data.failed > 0) toast.warning(`${data.failed} failed`);
         setRows([emptyRow()]);
       } else {
-        toast.error('Gagal menyimpan');
+        toast.error('Failed to save');
       }
     } finally { setSaving(false); }
   };
 
   const downloadTemplate = () => {
     const headers = 'title\ttest_type\tpreconditions\ttest_steps\ttest_data\texpected_result\tpriority\tnotes';
-    const example = 'Login berhasil\tfunctional\tUser belum login\t1. Buka halaman login\nmasukkan username\nklik submit\tusername: admin\npassword: Pass123\tUser berhasil masuk\thigh\t';
+    const example = 'Login successful\tfunctional\tUser not logged in\t1. Open login page\nenter username\nclick submit\tusername: admin\npassword: Pass123\tUser successfully logged in\thigh\t';
     const content = headers + '\n' + example;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -153,43 +154,44 @@ export default function BulkAddPage() {
 
   return (
     <AppShell>
-      <div className="page-header">
+      <header className="page-header main-header">
         <div>
-          <h1 className="page-title">Tambah Test Case Massal</h1>
-          <p className="page-subtitle">Tambah banyak test case sekaligus dengan tabel editable atau paste dari Excel</p>
+          <h1 className="page-title">Bulk Add Test Cases</h1>
+          <p className="page-subtitle">Add multiple test cases at once using an editable table or paste from Excel</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-secondary" onClick={downloadTemplate}>
             <Download size={14} /> Template
           </button>
           <button className="btn btn-primary" onClick={saveAll} disabled={saving} id="btn-save-all-bulk">
             {saving ? <span className="spinner" /> : <Save size={14} />}
-            Simpan Semua ({rows.length})
+            Save All ({rows.length})
           </button>
+          <ThemeToggle />
         </div>
-      </div>
+      </header>
 
       {/* Defaults */}
       <div className="card card-sm" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--foreground-muted)', width: 120 }}>Default untuk semua baris:</div>
+          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--foreground-muted)', width: 120 }}>Default for all rows:</div>
           <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Modul</label>
+            <label className="form-label">Module</label>
             <select className="form-control" style={{ width: 180 }} value={defaultModuleId}
               onChange={e => { setDefaultModuleId(e.target.value); setDefaultFeatureId(''); }}>
-              <option value="">-- Modul --</option>
+              <option value="">-- Module --</option>
               {modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Fitur</label>
+            <label className="form-label">Feature</label>
             <select className="form-control" style={{ width: 180 }} value={defaultFeatureId}
               onChange={e => setDefaultFeatureId(e.target.value)} disabled={!defaultModuleId}>
-              <option value="">-- Fitur --</option>
+              <option value="">-- Feature --</option>
               {filteredFeatures(defaultModuleId).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={applyDefaults}>Terapkan ke Semua</button>
+          <button className="btn btn-secondary btn-sm" onClick={applyDefaults}>Apply to All</button>
         </div>
       </div>
 
@@ -197,9 +199,9 @@ export default function BulkAddPage() {
       <div className="info-box" style={{ marginBottom: 16 }}>
         <Info size={14} style={{ flexShrink: 0 }} />
         <div style={{ fontSize: 12 }}>
-          Anda bisa <strong>paste langsung dari Excel/Google Sheets</strong> dengan mengklik sel tabel di bawah, lalu Ctrl+V.
-          Urutan kolom: Judul, Tipe Test, Prasyarat, Langkah, Data, Expected Result, Prioritas, Catatan.
-          Atau <strong>download template</strong> di kanan atas.
+          You can <strong>paste directly from Excel/Google Sheets</strong> by clicking a table cell below, then pressing Ctrl+V.
+          Column order: Title, Test Type, Preconditions, Steps, Data, Expected Result, Priority, Notes.
+          Or <strong>download the template</strong> at the top right.
         </div>
       </div>
 
@@ -217,19 +219,19 @@ export default function BulkAddPage() {
           <thead>
             <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
               <th style={{ padding: '8px 10px', width: 30, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>#</th>
-              <th style={{ padding: '8px 10px', minWidth: 140, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Modul *</th>
-              <th style={{ padding: '8px 10px', minWidth: 140, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Fitur *</th>
+              <th style={{ padding: '8px 10px', minWidth: 140, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Module *</th>
+              <th style={{ padding: '8px 10px', minWidth: 140, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Feature *</th>
               <th style={{ padding: '8px 10px', minWidth: 80, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Ref</th>
-              <th style={{ padding: '8px 10px', minWidth: 200, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Judul *</th>
-              <th style={{ padding: '8px 10px', minWidth: 110, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Tipe</th>
-              <th style={{ padding: '8px 10px', minWidth: 150, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Prasyarat</th>
-              <th style={{ padding: '8px 10px', minWidth: 200, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Langkah Test</th>
-              <th style={{ padding: '8px 10px', minWidth: 130, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Data Test</th>
+              <th style={{ padding: '8px 10px', minWidth: 200, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Title *</th>
+              <th style={{ padding: '8px 10px', minWidth: 110, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Type</th>
+              <th style={{ padding: '8px 10px', minWidth: 150, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Preconditions</th>
+              <th style={{ padding: '8px 10px', minWidth: 200, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Test Steps</th>
+              <th style={{ padding: '8px 10px', minWidth: 130, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Test Data</th>
               <th style={{ padding: '8px 10px', minWidth: 160, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Expected Result</th>
-              <th style={{ padding: '8px 10px', minWidth: 90, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Prioritas</th>
-              <th style={{ padding: '8px 10px', minWidth: 90, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Status Prep</th>
-              <th style={{ padding: '8px 10px', minWidth: 120, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Catatan</th>
-              <th style={{ padding: '8px 10px', width: 70, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Aksi</th>
+              <th style={{ padding: '8px 10px', minWidth: 90, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Priority</th>
+              <th style={{ padding: '8px 10px', minWidth: 90, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Prep Status</th>
+              <th style={{ padding: '8px 10px', minWidth: 120, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Notes</th>
+              <th style={{ padding: '8px 10px', width: 70, color: 'var(--foreground-muted)', fontWeight: 600, fontSize: 11 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -259,7 +261,7 @@ export default function BulkAddPage() {
                   <input style={{ width: '100%', background: 'transparent', border: row._error ? '1px solid var(--error)' : '1px solid transparent', borderRadius: 4, padding: '4px 6px', color: 'var(--foreground)', fontSize: 12 }}
                     value={row.title} onChange={e => updateRow(row.id, 'title', e.target.value)}
                     onPaste={handlePaste}
-                    placeholder="Judul test case" />
+                    placeholder="Test case title" />
                   {row._error && <div style={{ fontSize: 10, color: 'var(--error)', marginTop: 2 }}>{row._error}</div>}
                 </td>
                 <td style={{ padding: '4px 6px' }}>
@@ -302,10 +304,10 @@ export default function BulkAddPage() {
                 </td>
                 <td style={{ padding: '4px 8px' }}>
                   <div style={{ display: 'flex', gap: 4, flexDirection: 'column' }}>
-                    <button className="btn btn-ghost btn-icon btn-sm" title="Duplikasi" onClick={() => duplicateRow(row.id)}>
+                    <button className="btn btn-ghost btn-icon btn-sm" title="Duplicate" onClick={() => duplicateRow(row.id)}>
                       <Copy size={12} />
                     </button>
-                    <button className="btn btn-ghost btn-icon btn-sm" title="Hapus" onClick={() => removeRow(row.id)}
+                    <button className="btn btn-ghost btn-icon btn-sm" title="Delete" onClick={() => removeRow(row.id)}
                       disabled={rows.length === 1}>
                       <Trash2 size={12} style={{ color: 'var(--error)' }} />
                     </button>
@@ -319,15 +321,15 @@ export default function BulkAddPage() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
         <button className="btn btn-secondary" onClick={addRow} id="btn-add-bulk-row">
-          <Plus size={14} /> Tambah Baris
+          <Plus size={14} /> Add Row
         </button>
         <div style={{ display: 'flex', gap: 10 }}>
           <span style={{ fontSize: 13, color: 'var(--foreground-muted)', alignSelf: 'center' }}>
-            {rows.length} baris
+            {rows.length} row{rows.length === 1 ? '' : 's'}
           </span>
           <button className="btn btn-primary" onClick={saveAll} disabled={saving}>
             {saving ? <span className="spinner" /> : <Save size={14} />}
-            Simpan Semua
+            Save All
           </button>
         </div>
       </div>

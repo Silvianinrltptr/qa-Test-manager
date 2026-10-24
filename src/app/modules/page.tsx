@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { EmptyState, LoadingSpinner } from '@/components/ui/Shared';
 import { useToast } from '@/components/ui/Toast';
@@ -25,7 +26,6 @@ export default function ModulesPage() {
   const [featForm, setFeatForm] = useState({ name: '', description: '', module_id: '' });
 
   const fetchAll = async () => {
-    setLoading(true);
     try {
       const [mRes, fRes] = await Promise.all([
         fetch('/api/modules'),
@@ -66,7 +66,7 @@ export default function ModulesPage() {
 
   const saveModule = async () => {
     if (!modForm.name.trim() || !modForm.prefix.trim()) {
-      toast.error('Nama dan prefix wajib diisi'); return;
+      toast.error('Name and prefix are required'); return;
     }
     setSaving(true);
     try {
@@ -74,19 +74,19 @@ export default function ModulesPage() {
       const method = editModule ? 'PUT' : 'POST';
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(modForm) });
       if (res.ok) {
-        toast.success(editModule ? 'Modul diperbarui' : 'Modul berhasil dibuat');
+        toast.success(editModule ? 'Module updated' : 'Module created successfully');
         setShowModuleModal(false);
         fetchAll();
       } else {
         const err = await res.json();
-        toast.error(err.error || 'Gagal menyimpan');
+        toast.error(err.error || 'Failed to save');
       }
     } finally { setSaving(false); }
   };
 
   const saveFeature = async () => {
     if (!featForm.name.trim() || !featForm.module_id) {
-      toast.error('Nama dan modul wajib diisi'); return;
+      toast.error('Name and module are required'); return;
     }
     setSaving(true);
     try {
@@ -95,12 +95,12 @@ export default function ModulesPage() {
       const body = { ...featForm, module_id: Number(featForm.module_id) };
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (res.ok) {
-        toast.success(editFeature ? 'Fitur diperbarui' : 'Fitur berhasil dibuat');
+        toast.success(editFeature ? 'Feature updated' : 'Feature created successfully');
         setShowFeatureModal(false);
         fetchAll();
       } else {
         const err = await res.json();
-        toast.error(err.error || 'Gagal menyimpan');
+        toast.error(err.error || 'Failed to save');
       }
     } finally { setSaving(false); }
   };
@@ -112,12 +112,12 @@ export default function ModulesPage() {
       const url = deleteTarget.type === 'module' ? `/api/modules/${deleteTarget.id}` : `/api/features/${deleteTarget.id}`;
       const res = await fetch(url, { method: 'DELETE' });
       if (res.ok) {
-        toast.success(`${deleteTarget.type === 'module' ? 'Modul' : 'Fitur'} diarsipkan`);
+        toast.success(`${deleteTarget.type === 'module' ? 'Module' : 'Feature'} archived`);
         if (deleteTarget.type === 'module' && selectedModule?.id === deleteTarget.id) setSelectedModule(null);
         setDeleteTarget(null);
         fetchAll();
       } else {
-        toast.error('Gagal menghapus');
+        toast.error('Failed to delete');
       }
     } finally { setSaving(false); }
   };
@@ -128,33 +128,34 @@ export default function ModulesPage() {
 
   return (
     <AppShell>
-      <div className="page-header">
+      <header className="page-header main-header">
         <div>
-          <h1 className="page-title">Modul & Fitur</h1>
-          <p className="page-subtitle">Kelola hierarki Proyek → Modul → Fitur</p>
+          <h1 className="page-title">Modules & Features</h1>
+          <p className="page-subtitle">Manage Project → Module → Feature hierarchy</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-secondary" onClick={() => openCreateFeature()} id="btn-create-feature">
-            <FolderOpen size={14} /> Tambah Fitur
+            <FolderOpen size={14} /> Add Feature
           </button>
           <button className="btn btn-primary" onClick={openCreateModule} id="btn-create-module">
-            <Plus size={14} /> Modul Baru
+            <Plus size={14} /> New Module
           </button>
+          <ThemeToggle />
         </div>
-      </div>
+      </header>
 
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 20, alignItems: 'start' }}>
         {/* Module list */}
         <div>
           <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600, color: 'var(--foreground-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Modul ({modules.length})
+            Modules ({modules.length})
           </div>
           {modules.length === 0 ? (
             <EmptyState
               icon={<Package size={24} />}
-              title="Belum ada modul"
-              description="Buat modul pertama untuk mulai mengorganisir test case"
-              action={<button className="btn btn-primary btn-sm" onClick={openCreateModule}><Plus size={12} /> Buat Modul</button>}
+              title="No modules yet"
+              description="Create your first module to start organizing test cases"
+              action={<button className="btn btn-primary btn-sm" onClick={openCreateModule}><Plus size={12} /> Create Module</button>}
             />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -180,7 +181,7 @@ export default function ModulesPage() {
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mod.name}</div>
                         <div style={{ fontSize: 11, color: 'var(--foreground-muted)' }}>
-                          {mod.prefix} · {mod.feature_count ?? 0} fitur · {mod.test_case_count ?? 0} TC
+                          {mod.prefix} · {mod.feature_count ?? 0} features · {mod.test_case_count ?? 0} TCs
                         </div>
                       </div>
                     </div>
@@ -212,23 +213,23 @@ export default function ModulesPage() {
               <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--foreground-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Fitur dalam {selectedModule.name}
+                    Features in {selectedModule.name}
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--foreground-dim)', marginTop: 2 }}>{selectedFeatures.length} fitur</div>
+                  <div style={{ fontSize: 12, color: 'var(--foreground-dim)', marginTop: 2 }}>{selectedFeatures.length} features</div>
                 </div>
                 <button className="btn btn-primary btn-sm" onClick={() => openCreateFeature(selectedModule.id)} id="btn-add-feature-to-module">
-                  <Plus size={13} /> Tambah Fitur
+                  <Plus size={13} /> Add Feature
                 </button>
               </div>
 
               {selectedFeatures.length === 0 ? (
                 <EmptyState
                   icon={<FolderOpen size={24} />}
-                  title="Belum ada fitur"
-                  description="Tambahkan fitur ke modul ini untuk mulai mengelompokkan test case"
+                  title="No features yet"
+                  description="Add features to this module to start grouping test cases"
                   action={
                     <button className="btn btn-primary btn-sm" onClick={() => openCreateFeature(selectedModule.id)}>
-                      <Plus size={12} /> Tambah Fitur
+                      <Plus size={12} /> Add Feature
                     </button>
                   }
                 />
@@ -247,7 +248,7 @@ export default function ModulesPage() {
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontWeight: 600, fontSize: 14 }}>{feat.name}</div>
                             <div style={{ fontSize: 11, color: 'var(--foreground-muted)', marginTop: 2 }}>
-                              {feat.test_case_count ?? 0} test case
+                              {feat.test_case_count ?? 0} test cases
                             </div>
                             {feat.description && (
                               <div style={{ fontSize: 12, color: 'var(--foreground-muted)', marginTop: 4, lineHeight: 1.4 }}>
@@ -273,8 +274,8 @@ export default function ModulesPage() {
           ) : (
             <div className="empty-state" style={{ paddingTop: 80 }}>
               <div className="empty-icon"><Layers size={28} /></div>
-              <div className="empty-title">Pilih modul</div>
-              <div className="empty-desc">Klik modul di sebelah kiri untuk melihat fiturnya</div>
+              <div className="empty-title">Select a module</div>
+              <div className="empty-desc">Click a module on the left to view its features</div>
             </div>
           )}
         </div>
@@ -284,32 +285,32 @@ export default function ModulesPage() {
       <Modal
         isOpen={showModuleModal}
         onClose={() => setShowModuleModal(false)}
-        title={editModule ? 'Edit Modul' : 'Buat Modul Baru'}
+        title={editModule ? 'Edit Module' : 'Create New Module'}
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setShowModuleModal(false)}>Batal</button>
+            <button className="btn btn-secondary" onClick={() => setShowModuleModal(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={saveModule} disabled={saving} id="btn-save-module">
-              {saving ? <span className="spinner" /> : (editModule ? 'Simpan' : 'Buat Modul')}
+              {saving ? <span className="spinner" /> : (editModule ? 'Save' : 'Create Module')}
             </button>
           </>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="form-group">
-            <label className="form-label">Nama Modul <span className="form-required">*</span></label>
+            <label className="form-label">Module Name <span className="form-required">*</span></label>
             <input
               className="form-control"
-              placeholder="contoh: Autentikasi"
+              placeholder="e.g. Authentication"
               value={modForm.name}
               onChange={e => setModForm(p => ({ ...p, name: e.target.value }))}
               id="input-module-name"
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Prefix (kode unik) <span className="form-required">*</span></label>
+            <label className="form-label">Prefix (unique code) <span className="form-required">*</span></label>
             <input
               className="form-control"
-              placeholder="contoh: AUTH"
+              placeholder="e.g. AUTH"
               value={modForm.prefix}
               onChange={e => setModForm(p => ({ ...p, prefix: e.target.value.toUpperCase() }))}
               disabled={!!editModule}
@@ -317,14 +318,14 @@ export default function ModulesPage() {
               id="input-module-prefix"
             />
             <div style={{ fontSize: 11, color: 'var(--foreground-muted)' }}>
-              Prefix digunakan untuk ID test case, contoh: AUTH-001. Tidak bisa diubah setelah dibuat.
+              Prefix is used for test case IDs, e.g. AUTH-001. Cannot be changed once created.
             </div>
           </div>
           <div className="form-group">
-            <label className="form-label">Deskripsi</label>
+            <label className="form-label">Description</label>
             <textarea
               className="form-control"
-              placeholder="Deskripsi modul (opsional)"
+              placeholder="Module description (optional)"
               value={modForm.description}
               onChange={e => setModForm(p => ({ ...p, description: e.target.value }))}
               rows={3}
@@ -337,44 +338,44 @@ export default function ModulesPage() {
       <Modal
         isOpen={showFeatureModal}
         onClose={() => setShowFeatureModal(false)}
-        title={editFeature ? 'Edit Fitur' : 'Tambah Fitur Baru'}
+        title={editFeature ? 'Edit Feature' : 'Add New Feature'}
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setShowFeatureModal(false)}>Batal</button>
+            <button className="btn btn-secondary" onClick={() => setShowFeatureModal(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={saveFeature} disabled={saving} id="btn-save-feature">
-              {saving ? <span className="spinner" /> : (editFeature ? 'Simpan' : 'Tambah Fitur')}
+              {saving ? <span className="spinner" /> : (editFeature ? 'Save' : 'Add Feature')}
             </button>
           </>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="form-group">
-            <label className="form-label">Modul <span className="form-required">*</span></label>
+            <label className="form-label">Module <span className="form-required">*</span></label>
             <select
               className="form-control"
               value={featForm.module_id}
               onChange={e => setFeatForm(p => ({ ...p, module_id: e.target.value }))}
               id="select-feature-module"
             >
-              <option value="">-- Pilih Modul --</option>
+              <option value="">-- Select Module --</option>
               {modules.map(m => <option key={m.id} value={m.id}>{m.name} ({m.prefix})</option>)}
             </select>
           </div>
           <div className="form-group">
-            <label className="form-label">Nama Fitur <span className="form-required">*</span></label>
+            <label className="form-label">Feature Name <span className="form-required">*</span></label>
             <input
               className="form-control"
-              placeholder="contoh: Login"
+              placeholder="e.g. Login"
               value={featForm.name}
               onChange={e => setFeatForm(p => ({ ...p, name: e.target.value }))}
               id="input-feature-name"
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Deskripsi</label>
+            <label className="form-label">Description</label>
             <textarea
               className="form-control"
-              placeholder="Deskripsi fitur (opsional)"
+              placeholder="Feature description (optional)"
               value={featForm.description}
               onChange={e => setFeatForm(p => ({ ...p, description: e.target.value }))}
               rows={3}
@@ -388,9 +389,9 @@ export default function ModulesPage() {
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
-        title={`Arsipkan ${deleteTarget?.type === 'module' ? 'Modul' : 'Fitur'}`}
-        message={`"${deleteTarget?.name}" akan diarsipkan. Data tidak akan dihapus permanen dan dapat dipulihkan kapan saja.`}
-        confirmLabel="Arsipkan"
+        title={`Archive ${deleteTarget?.type === 'module' ? 'Module' : 'Feature'}`}
+        message={`"${deleteTarget?.name}" will be archived. Data will not be permanently deleted and can be restored at any time.`}
+        confirmLabel="Archive"
         danger
         loading={saving}
       />

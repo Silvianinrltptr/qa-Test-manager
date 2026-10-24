@@ -1,8 +1,12 @@
 import { getDb, generateCaseId, logActivity, logChange } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const body = await req.json();
     const { rows, fieldMap } = body;
@@ -15,14 +19,15 @@ export async function POST(req: NextRequest) {
 
     const results: { rowIndex: number; status: string; caseId?: string; error?: string }[] = [];
 
-    const insertFn = db.transaction((rows: any[]) => {
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
+    const insertFn = db.transaction((importRows: Record<string, unknown>[]) => {
+      for (let i = 0; i < importRows.length; i++) {
+        const row = importRows[i];
         
         // Map fields
         const getVal = (field: string) => {
           const col = fieldMap?.[field];
-          return col ? row[col] : row[field];
+          const val = col ? row[col] : row[field];
+          return val !== undefined && val !== null ? String(val) : '';
         };
 
         const moduleIdRaw = getVal('module_id');
@@ -30,7 +35,7 @@ export async function POST(req: NextRequest) {
         const title = getVal('title')?.trim();
 
         if (!title) {
-          results.push({ rowIndex: i, status: 'error', error: 'Title wajib diisi' });
+          results.push({ rowIndex: i, status: 'error', error: 'Title is required' });
           continue;
         }
 
@@ -53,7 +58,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (!moduleId || !featureId) {
-          results.push({ rowIndex: i, status: 'error', error: `Module "${moduleIdRaw}" atau Feature "${featureIdRaw}" tidak ditemukan` });
+          results.push({ rowIndex: i, status: 'error', error: `Module "${moduleIdRaw}" or Feature "${featureIdRaw}" not found` });
           continue;
         }
 
@@ -63,7 +68,7 @@ export async function POST(req: NextRequest) {
         ).get(title, featureId) as { case_id: string } | undefined;
 
         if (existing) {
-          results.push({ rowIndex: i, status: 'duplicate', caseId: existing.case_id, error: `Duplikat dari ${existing.case_id}` });
+          results.push({ rowIndex: i, status: 'duplicate', caseId: existing.case_id, error: `Duplicate of ${existing.case_id}` });
           continue;
         }
 
@@ -89,7 +94,7 @@ export async function POST(req: NextRequest) {
         );
 
         const newCase = db.prepare('SELECT id FROM test_cases WHERE case_id = ?').get(caseId) as { id: number };
-        logActivity(db, 'imported', 'test_case', newCase.id, caseId, `Test case "${title}" diimpor`);
+        logActivity(db, 'imported', 'test_case', newCase.id, caseId, `Test case "${title}" imported`);
         logChange(db, {
           entityType: 'test_case', entityId: newCase.id, entityRef: caseId,
           changeType: 'created', newValues: { source: 'import', title }

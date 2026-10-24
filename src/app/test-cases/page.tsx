@@ -2,15 +2,27 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { ResultBadge, PriorityBadge, PrepBadge, LifecycleBadge, TypeBadge, EmptyState, LoadingSpinner, Pagination } from '@/components/ui/Shared';
 import { useToast } from '@/components/ui/Toast';
 import { Plus, Search, Filter, Download, Edit2, Eye, Trash2, ClipboardList, SortAsc, SortDesc, ChevronDown, X, Play, RotateCcw } from 'lucide-react';
-import type { TestCase, Module, Feature } from '@/lib/types';
+import type { TestCase, Module, Feature, Execution, TestCaseComment } from '@/lib/types';
 import { TEST_TYPES, PRIORITIES, PREP_STATUSES, LIFECYCLE_STATUSES } from '@/lib/types';
 
+interface TestCaseDetail {
+  testCase?: TestCase;
+  executions?: Execution[];
+  comments?: TestCaseComment[];
+}
+
+function renderSortIcon(col: string, sortBy: string, sortDir: 'ASC' | 'DESC') {
+  if (sortBy !== col) return null;
+  return sortDir === 'ASC' ? <SortAsc size={12} /> : <SortDesc size={12} />;
+}
+
 const EXEC_RESULTS = [
-  { value: '', label: 'Semua Hasil' },
+  { value: '', label: 'All Results' },
   { value: 'pass', label: 'Pass' },
   { value: 'fail', label: 'Fail' },
   { value: 'blocked', label: 'Blocked' },
@@ -33,7 +45,7 @@ export default function TestCasesPage() {
   const [saving, setSaving] = useState(false);
   const [sortBy, setSortBy] = useState('created_at');
   const [sortDir, setSortDir] = useState<'ASC' | 'DESC'>('DESC');
-  const [caseDetail, setCaseDetail] = useState<any>(null);
+  const [caseDetail, setCaseDetail] = useState<TestCaseDetail | null>(null);
 
   const [filters, setFilters] = useState({
     search: '', moduleId: '', featureId: '', priority: '', prepStatus: '',
@@ -52,7 +64,6 @@ export default function TestCasesPage() {
   });
 
   const fetchData = useCallback(async (page = 1) => {
-    setLoading(true);
     try {
       const params = new URLSearchParams({
         page: String(page), limit: String(pagination.limit),
@@ -89,9 +100,6 @@ export default function TestCasesPage() {
     else { setSortBy(col); setSortDir('DESC'); }
   };
 
-  const SortIcon = ({ col }: { col: string }) =>
-    sortBy === col ? (sortDir === 'ASC' ? <SortAsc size={12} /> : <SortDesc size={12} />) : null;
-
   const openCreate = () => {
     setForm({
       module_id: '', feature_id: '', requirement_ref: '', title: '', test_type: 'functional',
@@ -124,7 +132,7 @@ export default function TestCasesPage() {
 
   const saveCase = async () => {
     if (!form.title.trim() || !form.module_id || !form.feature_id) {
-      toast.error('Judul, modul, dan fitur wajib diisi'); return;
+      toast.error('Title, module, and feature are required'); return;
     }
     setSaving(true);
     try {
@@ -133,21 +141,21 @@ export default function TestCasesPage() {
         const res = await fetch(`/api/test-cases/${editCase.id}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
         });
-        if (res.ok) { toast.success('Test case diperbarui'); setShowCreateModal(false); fetchData(pagination.page); }
-        else { const e = await res.json(); toast.error(e.error || 'Gagal menyimpan'); }
+        if (res.ok) { toast.success('Test case updated'); setShowCreateModal(false); fetchData(pagination.page); }
+        else { const e = await res.json(); toast.error(e.error || 'Failed to save'); }
       } else {
         const res = await fetch('/api/test-cases', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ cases: [body] })
         });
-        if (res.ok) { toast.success('Test case berhasil dibuat'); setShowCreateModal(false); fetchData(1); }
-        else { const e = await res.json(); toast.error(e.error || 'Gagal menyimpan'); }
+        if (res.ok) { toast.success('Test case created successfully'); setShowCreateModal(false); fetchData(1); }
+        else { const e = await res.json(); toast.error(e.error || 'Failed to save'); }
       }
     } finally { setSaving(false); }
   };
 
   const saveExecution = async () => {
-    if (!execForm.result) { toast.error('Pilih hasil eksekusi'); return; }
+    if (!execForm.result) { toast.error('Select execution result'); return; }
     if (!execCase) return;
     setSaving(true);
     try {
@@ -156,11 +164,11 @@ export default function TestCasesPage() {
         body: JSON.stringify({ test_case_id: execCase.id, ...execForm })
       });
       if (res.ok) {
-        toast.success(`Eksekusi disimpan: ${execForm.result.toUpperCase()}`);
+        toast.success(`Execution saved: ${execForm.result.toUpperCase()}`);
         setExecCase(null);
         fetchData(pagination.page);
       } else {
-        const e = await res.json(); toast.error(e.error || 'Gagal menyimpan');
+        const e = await res.json(); toast.error(e.error || 'Failed to save');
       }
     } finally { setSaving(false); }
   };
@@ -171,7 +179,7 @@ export default function TestCasesPage() {
     try {
       const res = await fetch(`/api/test-cases/${deleteTarget.id}`, { method: 'DELETE' });
       if (res.ok) {
-        toast.success('Test case diarsipkan');
+        toast.success('Test case archived');
         setDeleteTarget(null);
         fetchData(pagination.page);
       }
@@ -185,7 +193,7 @@ export default function TestCasesPage() {
         body: JSON.stringify({ lifecycle_status: 'obsolete' })
       });
     }
-    toast.success(`${selected.size} test case ditandai usang`);
+    toast.success(`${selected.size} test case${selected.size > 1 ? 's' : ''} marked as obsolete`);
     setSelected(new Set());
     fetchData(pagination.page);
   };
@@ -214,27 +222,28 @@ export default function TestCasesPage() {
   return (
     <AppShell>
       {/* Header */}
-      <div className="page-header">
+      <header className="page-header main-header">
         <div>
           <h1 className="page-title">Test Cases</h1>
           <p className="page-subtitle">
-            {pagination.total} test case {filters.lifecycle !== 'all' ? `(${filters.lifecycle})` : ''}
+            {pagination.total} test case{pagination.total === 1 ? '' : 's'} {filters.lifecycle !== 'all' ? `(${filters.lifecycle})` : ''}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {selected.size > 0 && (
             <button className="btn btn-secondary btn-sm" onClick={bulkMarkObsolete}>
-              <X size={13} /> Tandai Usang ({selected.size})
+              <X size={13} /> Mark Obsolete ({selected.size})
             </button>
           )}
           <button className="btn btn-secondary" onClick={exportCSV}>
             <Download size={14} /> Export CSV
           </button>
           <button className="btn btn-primary" onClick={openCreate} id="btn-create-testcase">
-            <Plus size={14} /> Tambah Test Case
+            <Plus size={14} /> New Test Case
           </button>
+          <ThemeToggle />
         </div>
-      </div>
+      </header>
 
       {/* Filters */}
       <div className="card card-sm" style={{ marginBottom: 16 }}>
@@ -243,7 +252,7 @@ export default function TestCasesPage() {
             <Search size={14} className="search-icon" />
             <input
               className="form-control"
-              placeholder="Cari ID, judul, ref..."
+              placeholder="Search ID, title, ref..."
               value={filters.search}
               onChange={e => setFilters(p => ({ ...p, search: e.target.value }))}
               id="search-testcases"
@@ -251,22 +260,22 @@ export default function TestCasesPage() {
           </div>
           <select className="form-control" style={{ width: 160 }} value={filters.moduleId}
             onChange={e => setFilters(p => ({ ...p, moduleId: e.target.value, featureId: '' }))}>
-            <option value="">Semua Modul</option>
+            <option value="">All Modules</option>
             {modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
           <select className="form-control" style={{ width: 160 }} value={filters.featureId}
             onChange={e => setFilters(p => ({ ...p, featureId: e.target.value }))}>
-            <option value="">Semua Fitur</option>
+            <option value="">All Features</option>
             {filteredFeatures.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
           <select className="form-control" style={{ width: 140 }} value={filters.priority}
             onChange={e => setFilters(p => ({ ...p, priority: e.target.value }))}>
-            <option value="">Semua Prioritas</option>
+            <option value="">All Priorities</option>
             {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
           <select className="form-control" style={{ width: 140 }} value={filters.prepStatus}
             onChange={e => setFilters(p => ({ ...p, prepStatus: e.target.value }))}>
-            <option value="">Status Persiapan</option>
+            <option value="">Prep Status</option>
             {PREP_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
           <select className="form-control" style={{ width: 130 }} value={filters.latestResult}
@@ -275,11 +284,11 @@ export default function TestCasesPage() {
           </select>
           <select className="form-control" style={{ width: 120 }} value={filters.lifecycle}
             onChange={e => setFilters(p => ({ ...p, lifecycle: e.target.value }))}>
-            <option value="active">Aktif</option>
+            <option value="active">Active</option>
             <option value="draft">Draft</option>
-            <option value="obsolete">Usang</option>
-            <option value="archived">Diarsipkan</option>
-            <option value="all">Semua</option>
+            <option value="obsolete">Obsolete</option>
+            <option value="archived">Archived</option>
+            <option value="all">All</option>
           </select>
         </div>
       </div>
@@ -288,9 +297,9 @@ export default function TestCasesPage() {
       {loading ? <LoadingSpinner /> : testCases.length === 0 ? (
         <EmptyState
           icon={<ClipboardList size={28} />}
-          title="Tidak ada test case"
-          description="Buat test case baru atau ubah filter pencarian"
-          action={<button className="btn btn-primary" onClick={openCreate}><Plus size={13} /> Tambah Test Case</button>}
+          title="No test cases found"
+          description="Create a new test case or change search filters"
+          action={<button className="btn btn-primary" onClick={openCreate}><Plus size={13} /> New Test Case</button>}
         />
       ) : (
         <>
@@ -302,17 +311,17 @@ export default function TestCasesPage() {
                     <input type="checkbox" checked={selected.size === testCases.length && testCases.length > 0} onChange={selectAll} />
                   </th>
                   <th onClick={() => handleSort('case_id')} style={{ cursor: 'pointer' }}>
-                    ID <SortIcon col="case_id" />
+                    ID {renderSortIcon('case_id', sortBy, sortDir)}
                   </th>
                   <th onClick={() => handleSort('title')} style={{ cursor: 'pointer', minWidth: 200 }}>
-                    Judul <SortIcon col="title" />
+                    Title {renderSortIcon('title', sortBy, sortDir)}
                   </th>
-                  <th>Modul / Fitur</th>
-                  <th onClick={() => handleSort('priority')} style={{ cursor: 'pointer' }}>Prioritas <SortIcon col="priority" /></th>
-                  <th>Tipe</th>
-                  <th onClick={() => handleSort('prep_status')} style={{ cursor: 'pointer' }}>Persiapan <SortIcon col="prep_status" /></th>
-                  <th onClick={() => handleSort('latest_result')} style={{ cursor: 'pointer' }}>Hasil <SortIcon col="latest_result" /></th>
-                  <th style={{ width: 120 }}>Aksi</th>
+                  <th>Module / Feature</th>
+                  <th onClick={() => handleSort('priority')} style={{ cursor: 'pointer' }}>Priority {renderSortIcon('priority', sortBy, sortDir)}</th>
+                  <th>Type</th>
+                  <th onClick={() => handleSort('prep_status')} style={{ cursor: 'pointer' }}>Preparation {renderSortIcon('prep_status', sortBy, sortDir)}</th>
+                  <th onClick={() => handleSort('latest_result')} style={{ cursor: 'pointer' }}>Result {renderSortIcon('latest_result', sortBy, sortDir)}</th>
+                  <th style={{ width: 120 }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -343,16 +352,16 @@ export default function TestCasesPage() {
                     <td><ResultBadge result={tc.latest_result} /></td>
                     <td>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-ghost btn-icon btn-sm" title="Lihat Detail" onClick={() => openView(tc)}>
+                        <button className="btn btn-ghost btn-icon btn-sm" title="View Details" onClick={() => openView(tc)}>
                           <Eye size={13} />
                         </button>
-                        <button className="btn btn-ghost btn-icon btn-sm" title="Eksekusi" onClick={() => { setExecCase(tc); setExecForm({ result: '', environment: '', actual_result: '', evidence: '', defect_ref: '', notes: '', is_retest: false }); }}>
+                        <button className="btn btn-ghost btn-icon btn-sm" title="Execute" onClick={() => { setExecCase(tc); setExecForm({ result: '', environment: '', actual_result: '', evidence: '', defect_ref: '', notes: '', is_retest: false }); }}>
                           <Play size={13} style={{ color: 'var(--success)' }} />
                         </button>
                         <button className="btn btn-ghost btn-icon btn-sm" title="Edit" onClick={() => openEdit(tc)}>
                           <Edit2 size={13} />
                         </button>
-                        <button className="btn btn-ghost btn-icon btn-sm" title="Arsipkan" onClick={() => setDeleteTarget(tc)}>
+                        <button className="btn btn-ghost btn-icon btn-sm" title="Archive" onClick={() => setDeleteTarget(tc)}>
                           <Trash2 size={13} style={{ color: 'var(--error)' }} />
                         </button>
                       </div>
@@ -366,7 +375,7 @@ export default function TestCasesPage() {
           {/* Pagination */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>
-              Menampilkan {(pagination.page - 1) * pagination.limit + 1}–{Math.min(pagination.page * pagination.limit, pagination.total)} dari {pagination.total}
+              Showing {(pagination.page - 1) * pagination.limit + 1}–{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
             </span>
             <Pagination page={pagination.page} totalPages={pagination.totalPages} onPageChange={p => fetchData(p)} />
           </div>
@@ -377,13 +386,13 @@ export default function TestCasesPage() {
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        title={editCase ? `Edit: ${editCase.case_id}` : 'Test Case Baru'}
+        title={editCase ? `Edit: ${editCase.case_id}` : 'New Test Case'}
         size="lg"
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>Batal</button>
+            <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={saveCase} disabled={saving} id="btn-save-testcase">
-              {saving ? <span className="spinner" /> : 'Simpan'}
+              {saving ? <span className="spinner" /> : 'Save'}
             </button>
           </>
         }
@@ -391,35 +400,35 @@ export default function TestCasesPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div className="grid-2">
             <div className="form-group">
-              <label className="form-label">Modul <span className="form-required">*</span></label>
+              <label className="form-label">Module <span className="form-required">*</span></label>
               <select className="form-control" value={form.module_id}
                 onChange={e => setForm(p => ({ ...p, module_id: e.target.value, feature_id: '' }))}>
-                <option value="">-- Pilih Modul --</option>
+                <option value="">-- Select Module --</option>
                 {modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Fitur <span className="form-required">*</span></label>
+              <label className="form-label">Feature <span className="form-required">*</span></label>
               <select className="form-control" value={form.feature_id}
                 onChange={e => setForm(p => ({ ...p, feature_id: e.target.value }))}>
-                <option value="">-- Pilih Fitur --</option>
+                <option value="">-- Select Feature --</option>
                 {formFeatures.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </div>
           </div>
           <div className="form-group">
-            <label className="form-label">Judul / Skenario Test <span className="form-required">*</span></label>
-            <input className="form-control" placeholder="contoh: Login berhasil dengan email dan password valid"
+            <label className="form-label">Title / Test Scenario <span className="form-required">*</span></label>
+            <input className="form-control" placeholder="e.g. Successful login with valid email and password"
               value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
           </div>
           <div className="grid-2">
             <div className="form-group">
-              <label className="form-label">Referensi Requirement</label>
-              <input className="form-control" placeholder="contoh: REQ-001" value={form.requirement_ref}
+              <label className="form-label">Requirement Reference</label>
+              <input className="form-control" placeholder="e.g. REQ-001" value={form.requirement_ref}
                 onChange={e => setForm(p => ({ ...p, requirement_ref: e.target.value }))} />
             </div>
             <div className="form-group">
-              <label className="form-label">Tipe Test</label>
+              <label className="form-label">Test Type</label>
               <select className="form-control" value={form.test_type}
                 onChange={e => setForm(p => ({ ...p, test_type: e.target.value }))}>
                 {TEST_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -428,14 +437,14 @@ export default function TestCasesPage() {
           </div>
           <div className="grid-2">
             <div className="form-group">
-              <label className="form-label">Prioritas</label>
+              <label className="form-label">Priority</label>
               <select className="form-control" value={form.priority}
                 onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}>
                 {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Status Persiapan</label>
+              <label className="form-label">Preparation Status</label>
               <select className="form-control" value={form.prep_status}
                 onChange={e => setForm(p => ({ ...p, prep_status: e.target.value }))}>
                 {PREP_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -443,46 +452,46 @@ export default function TestCasesPage() {
             </div>
           </div>
           <div className="form-group">
-            <label className="form-label">Prasyarat</label>
-            <textarea className="form-control" rows={2} placeholder="Kondisi awal yang diperlukan"
+            <label className="form-label">Preconditions</label>
+            <textarea className="form-control" rows={2} placeholder="Initial conditions required"
               value={form.preconditions} onChange={e => setForm(p => ({ ...p, preconditions: e.target.value }))} />
           </div>
           <div className="form-group">
-            <label className="form-label">Langkah Test</label>
-            <textarea className="form-control" rows={4} placeholder="1. Buka halaman login&#10;2. Masukkan username&#10;3. ..."
+            <label className="form-label">Test Steps</label>
+            <textarea className="form-control" rows={4} placeholder="1. Open login page&#10;2. Enter username&#10;3. ..."
               value={form.test_steps} onChange={e => setForm(p => ({ ...p, test_steps: e.target.value }))} />
           </div>
           <div className="grid-2">
             <div className="form-group">
-              <label className="form-label">Data Test</label>
-              <textarea className="form-control" rows={2} placeholder="Data yang digunakan"
+              <label className="form-label">Test Data</label>
+              <textarea className="form-control" rows={2} placeholder="Data used for testing"
                 value={form.test_data} onChange={e => setForm(p => ({ ...p, test_data: e.target.value }))} />
             </div>
             <div className="form-group">
               <label className="form-label">Expected Result</label>
-              <textarea className="form-control" rows={2} placeholder="Hasil yang diharapkan"
+              <textarea className="form-control" rows={2} placeholder="Expected outcome"
                 value={form.expected_result} onChange={e => setForm(p => ({ ...p, expected_result: e.target.value }))} />
             </div>
           </div>
           {editCase && (
             <>
               <div className="form-group">
-                <label className="form-label">Status Lifecycle</label>
+                <label className="form-label">Lifecycle Status</label>
                 <select className="form-control" value={form.lifecycle_status}
                   onChange={e => setForm(p => ({ ...p, lifecycle_status: e.target.value }))}>
                   {LIFECYCLE_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Alasan Perubahan</label>
-                <input className="form-control" placeholder="Alasan perubahan (untuk change log)"
+                <label className="form-label">Reason for Change</label>
+                <input className="form-control" placeholder="Reason for change (for change log)"
                   value={form.reason} onChange={e => setForm(p => ({ ...p, reason: e.target.value }))} />
               </div>
             </>
           )}
           <div className="form-group">
-            <label className="form-label">Catatan</label>
-            <textarea className="form-control" rows={2} placeholder="Catatan tambahan"
+            <label className="form-label">Notes</label>
+            <textarea className="form-control" rows={2} placeholder="Additional notes"
               value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
           </div>
         </div>
@@ -506,26 +515,26 @@ export default function TestCasesPage() {
             </div>
             <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>{viewCase.title}</h3>
             <div style={{ display: 'grid', gap: 14 }}>
-              {viewCase.requirement_ref && <DetailRow label="Referensi Requirement" value={viewCase.requirement_ref} />}
-              <DetailRow label="Modul / Fitur" value={`${viewCase.module_name} → ${viewCase.feature_name}`} />
-              {viewCase.preconditions && <DetailRow label="Prasyarat" value={viewCase.preconditions} pre />}
-              {viewCase.test_steps && <DetailRow label="Langkah Test" value={viewCase.test_steps} pre />}
-              {viewCase.test_data && <DetailRow label="Data Test" value={viewCase.test_data} pre />}
+              {viewCase.requirement_ref && <DetailRow label="Requirement Reference" value={viewCase.requirement_ref} />}
+              <DetailRow label="Module / Feature" value={`${viewCase.module_name} → ${viewCase.feature_name}`} />
+              {viewCase.preconditions && <DetailRow label="Preconditions" value={viewCase.preconditions} pre />}
+              {viewCase.test_steps && <DetailRow label="Test Steps" value={viewCase.test_steps} pre />}
+              {viewCase.test_data && <DetailRow label="Test Data" value={viewCase.test_data} pre />}
               {viewCase.expected_result && <DetailRow label="Expected Result" value={viewCase.expected_result} pre />}
               {viewCase.actual_result && <DetailRow label="Actual Result" value={viewCase.actual_result} pre />}
-              {viewCase.defect_ref && <DetailRow label="Referensi Defect" value={viewCase.defect_ref} />}
-              {viewCase.notes && <DetailRow label="Catatan" value={viewCase.notes} />}
+              {viewCase.defect_ref && <DetailRow label="Defect Reference" value={viewCase.defect_ref} />}
+              {viewCase.notes && <DetailRow label="Notes" value={viewCase.notes} />}
             </div>
-            {caseDetail?.executions?.length > 0 && (
+            {caseDetail && caseDetail.executions && caseDetail.executions.length > 0 ? (
               <div style={{ marginTop: 20 }}>
-                <div className="section-title" style={{ marginBottom: 10 }}>Riwayat Eksekusi ({caseDetail.executions.length})</div>
+                <div className="section-title" style={{ marginBottom: 10 }}>Execution History ({caseDetail.executions.length})</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {caseDetail.executions.slice(0, 5).map((ex: any) => (
+                  {caseDetail.executions.slice(0, 5).map(ex => (
                     <div key={ex.id} style={{ background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <ResultBadge result={ex.result} />
                         <span style={{ fontSize: 12, color: 'var(--foreground-muted)', marginLeft: 8 }}>
-                          {new Date(ex.exec_date).toLocaleString('id-ID')}
+                          {new Date(ex.exec_date).toLocaleString('en-US')}
                         </span>
                         {ex.environment && <span style={{ fontSize: 12, color: 'var(--foreground-muted)', marginLeft: 8 }}>@ {ex.environment}</span>}
                       </div>
@@ -534,7 +543,37 @@ export default function TestCasesPage() {
                   ))}
                 </div>
               </div>
-            )}
+            ) : null}
+
+            {caseDetail && caseDetail.comments && caseDetail.comments.length > 0 ? (
+              <div style={{ marginTop: 20 }}>
+                <div className="section-title" style={{ marginBottom: 10 }}>
+                  Collaborator Comments & Feedback ({caseDetail.comments.length})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {caseDetail.comments.map(c => (
+                    <div key={c.id} style={{ background: 'var(--surface-2)', borderRadius: 8, padding: '10px 14px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--foreground)' }}>
+                          {c.author_name} ({c.author_role.toUpperCase()})
+                        </span>
+                        <span className={`badge ${c.status === 'resolved' ? 'badge-success' : c.status === 'reviewed' ? 'badge-info' : 'badge-warning'}`} style={{ fontSize: 10 }}>
+                          {c.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--foreground-body)', whiteSpace: 'pre-wrap' }}>
+                        {c.content}
+                      </div>
+                      {c.reply && (
+                        <div style={{ marginTop: 6, fontSize: 12, color: 'var(--primary)', fontStyle: 'italic' }}>
+                          QA Reply: {c.reply}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
       </Modal>
@@ -543,12 +582,12 @@ export default function TestCasesPage() {
       <Modal
         isOpen={!!execCase}
         onClose={() => setExecCase(null)}
-        title={`Eksekusi: ${execCase?.case_id}`}
+        title={`Execute: ${execCase?.case_id}`}
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setExecCase(null)}>Batal</button>
+            <button className="btn btn-secondary" onClick={() => setExecCase(null)}>Cancel</button>
             <button className="btn btn-primary" onClick={saveExecution} disabled={saving} id="btn-save-execution">
-              {saving ? <span className="spinner" /> : 'Simpan Hasil'}
+              {saving ? <span className="spinner" /> : 'Save Result'}
             </button>
           </>
         }
@@ -559,7 +598,7 @@ export default function TestCasesPage() {
               <span>📋 {execCase.title}</span>
             </div>
             <div className="form-group">
-              <label className="form-label">Hasil Eksekusi <span className="form-required">*</span></label>
+              <label className="form-label">Execution Result <span className="form-required">*</span></label>
               <div style={{ display: 'flex', gap: 8 }}>
                 {[
                   { value: 'pass', label: '✅ Pass', color: 'var(--success)' },
@@ -581,29 +620,29 @@ export default function TestCasesPage() {
             <div className="grid-2">
               <div className="form-group">
                 <label className="form-label">Environment</label>
-                <input className="form-control" placeholder="contoh: Staging" value={execForm.environment}
+                <input className="form-control" placeholder="e.g. Staging" value={execForm.environment}
                   onChange={e => setExecForm(p => ({ ...p, environment: e.target.value }))} />
               </div>
               <div className="form-group">
-                <label className="form-label">Referensi Defect</label>
-                <input className="form-control" placeholder="contoh: BUG-001" value={execForm.defect_ref}
+                <label className="form-label">Defect Reference</label>
+                <input className="form-control" placeholder="e.g. BUG-001" value={execForm.defect_ref}
                   onChange={e => setExecForm(p => ({ ...p, defect_ref: e.target.value }))} />
               </div>
             </div>
             <div className="form-group">
               <label className="form-label">Actual Result</label>
-              <textarea className="form-control" rows={3} placeholder="Apa yang sebenarnya terjadi"
+              <textarea className="form-control" rows={3} placeholder="What actually occurred"
                 value={execForm.actual_result} onChange={e => setExecForm(p => ({ ...p, actual_result: e.target.value }))} />
             </div>
             <div className="form-group">
-              <label className="form-label">Catatan</label>
+              <label className="form-label">Notes</label>
               <textarea className="form-control" rows={2} value={execForm.notes}
                 onChange={e => setExecForm(p => ({ ...p, notes: e.target.value }))} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" id="is-retest" checked={execForm.is_retest}
                 onChange={e => setExecForm(p => ({ ...p, is_retest: e.target.checked }))} />
-              <label htmlFor="is-retest" style={{ fontSize: 13, cursor: 'pointer' }}>Ini adalah Retest</label>
+              <label htmlFor="is-retest" style={{ fontSize: 13, cursor: 'pointer' }}>This is a Retest</label>
             </div>
           </div>
         )}
@@ -614,9 +653,9 @@ export default function TestCasesPage() {
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={archiveCase}
-        title="Arsipkan Test Case"
-        message={`Test case "${deleteTarget?.title}" akan diarsipkan. Data tidak dihapus dan dapat dipulihkan.`}
-        confirmLabel="Arsipkan"
+        title="Archive Test Case"
+        message={`Test case "${deleteTarget?.title}" will be archived. Data is not deleted and can be restored.`}
+        confirmLabel="Archive"
         danger
         loading={saving}
       />

@@ -1,10 +1,14 @@
 import { getDb } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const { searchParams } = new URL(req.url);
     const type = searchParams.get('type') ?? 'test-cases';
@@ -19,9 +23,9 @@ export async function GET(req: NextRequest) {
         'Preconditions', 'Test Steps', 'Test Data', 'Expected Result', 'Priority', 'Notes'
       ].join(',');
       const example = [
-        '1', '1', 'REQ-001', 'Login berhasil dengan kredensial valid', 'functional',
-        'User berada di halaman login', '1. Buka halaman login\n2. Masukkan username\n3. Masukkan password\n4. Klik Login',
-        'username: admin, password: Pass123!', 'User berhasil login dan diarahkan ke dashboard', 'high', ''
+        '1', '1', 'REQ-001', 'Successful login with valid credentials', 'functional',
+        'User is on the login page', '1. Open login page\n2. Enter username\n3. Enter password\n4. Click Login',
+        'username: admin, password: Pass123!', 'User successfully logs in and is redirected to dashboard', 'high', ''
       ].map(v => `"${v}"`).join(',');
       const csv = headers + '\n' + example;
 

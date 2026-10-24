@@ -2,11 +2,27 @@
 
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ProgressBar, ResultBadge, LoadingSpinner, EmptyState } from '@/components/ui/Shared';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
-import { BarChart3, Plus, Camera, Download } from 'lucide-react';
-import type { WeeklySnapshot } from '@/lib/types';
+import { BarChart3, Camera, Download } from 'lucide-react';
+import type { WeeklySnapshot, TestResult } from '@/lib/types';
+
+interface WeeklySnapshotData {
+  totalActive?: number;
+  weeklyChanges?: {
+    added?: number;
+    updated?: number;
+    obsolete?: number;
+    reactivated?: number;
+  };
+  execDuringWeek?: number;
+  prepProgress?: { ready?: number; total?: number; pct?: number | null };
+  execProgress?: { executed?: number; readyTotal?: number; pct?: number | null };
+  passRate?: { pass?: number; total?: number; pct?: number | null };
+  results?: Record<string, number>;
+}
 
 export default function WeeklyProgressPage() {
   const toast = useToast();
@@ -14,35 +30,42 @@ export default function WeeklyProgressPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    week_start: '', week_end: '', notes: '', activities: '', next_priorities: ''
-  });
-
-  useEffect(() => {
-    fetchSnapshots();
-    // Set default dates to current week
+  const [form, setForm] = useState(() => {
     const now = new Date();
     const day = now.getDay();
-    const mon = new Date(now); mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const mon = new Date(now);
+    mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
     const fmt = (d: Date) => d.toISOString().split('T')[0];
-    setForm(p => ({ ...p, week_start: fmt(mon), week_end: fmt(sun) }));
-  }, []);
+    return {
+      week_start: fmt(mon),
+      week_end: fmt(sun),
+      notes: '',
+      activities: '',
+      next_priorities: '',
+    };
+  });
 
   const fetchSnapshots = async () => {
-    setLoading(true);
     try {
       const res = await fetch('/api/weekly-snapshots');
       if (res.ok) {
         const data = await res.json();
         setSnapshots(data.data);
       }
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    fetchSnapshots();
+  }, []);
 
   const saveSnapshot = async () => {
     if (!form.week_start || !form.week_end) {
-      toast.error('Tanggal minggu wajib diisi'); return;
+      toast.error('Week dates are required'); return;
     }
     setSaving(true);
     try {
@@ -52,58 +75,59 @@ export default function WeeklyProgressPage() {
         body: JSON.stringify(form)
       });
       if (res.ok) {
-        toast.success('Snapshot mingguan disimpan');
+        toast.success('Weekly snapshot saved');
         setShowModal(false);
         fetchSnapshots();
       } else {
-        toast.error('Gagal menyimpan snapshot');
+        toast.error('Failed to save snapshot');
       }
     } finally { setSaving(false); }
   };
 
   const formatWeek = (start: string, end: string) => {
-    const s = new Date(start).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-    const e = new Date(end).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    const s = new Date(start).toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+    const e = new Date(end).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
     return `${s} – ${e}`;
   };
 
   return (
     <AppShell>
-      <div className="page-header">
+      <header className="page-header main-header">
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <BarChart3 size={20} style={{ color: 'var(--primary)' }} />
-            Progres Mingguan
+            Weekly Progress
           </h1>
-          <p className="page-subtitle">Snapshot progres QA per minggu yang tersimpan secara historis</p>
+          <p className="page-subtitle">Historical weekly QA progress snapshots</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-secondary" onClick={() => window.open('/api/export?type=change-log')}>
             <Download size={14} /> Export
           </button>
           <button className="btn btn-primary" onClick={() => setShowModal(true)} id="btn-create-snapshot">
-            <Camera size={14} /> Ambil Snapshot
+            <Camera size={14} /> Take Snapshot
           </button>
+          <ThemeToggle />
         </div>
-      </div>
+      </header>
 
       <div className="info-box" style={{ marginBottom: 20 }}>
         <span style={{ fontSize: 13 }}>
-          📌 Klik <strong>Ambil Snapshot</strong> untuk menyimpan kondisi saat ini. Snapshot yang tersimpan tidak berubah meskipun data QA diperbarui setelahnya.
+          📌 Click <strong>Take Snapshot</strong> to record the current state. Saved snapshots remain unchanged even if QA data is updated later.
         </span>
       </div>
 
       {loading ? <LoadingSpinner /> : snapshots.length === 0 ? (
         <EmptyState
           icon={<BarChart3 size={28} />}
-          title="Belum ada snapshot mingguan"
-          description="Buat snapshot pertama untuk mulai melacak progres mingguan"
-          action={<button className="btn btn-primary" onClick={() => setShowModal(true)}><Camera size={13} /> Ambil Snapshot Sekarang</button>}
+          title="No weekly snapshots yet"
+          description="Create your first snapshot to start tracking weekly progress"
+          action={<button className="btn btn-primary" onClick={() => setShowModal(true)}><Camera size={13} /> Take Snapshot Now</button>}
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {snapshots.map(snap => {
-            let data: any = {};
+            let data: WeeklySnapshotData = {};
             try { data = JSON.parse(snap.snapshot_data); } catch {}
 
             return (
@@ -112,21 +136,21 @@ export default function WeeklyProgressPage() {
                   <div>
                     <div style={{ fontSize: 16, fontWeight: 700 }}>{formatWeek(snap.week_start, snap.week_end)}</div>
                     <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
-                      Diambil: {new Date(snap.created_at).toLocaleString('id-ID')}
+                      Taken: {new Date(snap.created_at).toLocaleString('en-US')}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: 24, fontWeight: 700 }}>{data.totalActive ?? 0}</div>
-                    <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Test case aktif</div>
+                    <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Active test cases</div>
                   </div>
                 </div>
 
                 <div className="grid-4" style={{ marginBottom: 16 }}>
                   {[
-                    { label: 'Ditambah', value: data.weeklyChanges?.added ?? 0, color: 'var(--success)' },
-                    { label: 'Diperbarui', value: data.weeklyChanges?.updated ?? 0, color: 'var(--primary)' },
-                    { label: 'Dieksekusi (minggu ini)', value: data.execDuringWeek ?? 0, color: 'var(--accent)' },
-                    { label: 'Usang', value: data.weeklyChanges?.obsolete ?? 0, color: 'var(--foreground-muted)' },
+                    { label: 'Added', value: data.weeklyChanges?.added ?? 0, color: 'var(--success)' },
+                    { label: 'Updated', value: data.weeklyChanges?.updated ?? 0, color: 'var(--primary)' },
+                    { label: 'Executed (this week)', value: data.execDuringWeek ?? 0, color: 'var(--accent)' },
+                    { label: 'Obsolete', value: data.weeklyChanges?.obsolete ?? 0, color: 'var(--foreground-muted)' },
                   ].map(item => (
                     <div key={item.label} style={{ textAlign: 'center', padding: '10px', background: 'var(--surface-2)', borderRadius: 8 }}>
                       <div style={{ fontSize: 22, fontWeight: 700, color: item.color }}>{item.value}</div>
@@ -137,11 +161,11 @@ export default function WeeklyProgressPage() {
 
                 <div className="grid-3" style={{ marginBottom: 16, gap: 12 }}>
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Persiapan Test</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Test Preparation</div>
                     <ProgressBar value={data.prepProgress?.ready ?? 0} max={data.prepProgress?.total ?? 0} color="primary" />
                   </div>
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Eksekusi Test</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Test Execution</div>
                     <ProgressBar value={data.execProgress?.executed ?? 0} max={data.execProgress?.readyTotal ?? 0} color="success" />
                   </div>
                   <div>
@@ -160,8 +184,8 @@ export default function WeeklyProgressPage() {
                       { key: 'not_run', label: 'Not Run' },
                     ].map(r => (
                       <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                        <ResultBadge result={r.key as any} />
-                        <span style={{ fontWeight: 600 }}>{data.results[r.key] ?? 0}</span>
+                        <ResultBadge result={r.key as TestResult} />
+                        <span style={{ fontWeight: 600 }}>{data.results?.[r.key] ?? 0}</span>
                       </div>
                     ))}
                   </div>
@@ -169,14 +193,14 @@ export default function WeeklyProgressPage() {
 
                 {snap.activities && (
                   <div style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground-muted)', marginBottom: 4 }}>Aktivitas Minggu Ini:</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground-muted)', marginBottom: 4 }}>This Week&apos;s Activities:</div>
                     <div style={{ fontSize: 13, color: 'var(--foreground)', whiteSpace: 'pre-wrap' }}>{snap.activities}</div>
                   </div>
                 )}
 
                 {snap.next_priorities && (
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground-muted)', marginBottom: 4 }}>Prioritas Minggu Depan:</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground-muted)', marginBottom: 4 }}>Next Week&apos;s Priorities:</div>
                     <div style={{ fontSize: 13, color: 'var(--foreground)', whiteSpace: 'pre-wrap' }}>{snap.next_priorities}</div>
                   </div>
                 )}
@@ -190,47 +214,47 @@ export default function WeeklyProgressPage() {
       <Modal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        title="Ambil Snapshot Mingguan"
+        title="Take Weekly Snapshot"
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
+            <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={saveSnapshot} disabled={saving} id="btn-save-snapshot">
               {saving ? <span className="spinner" /> : <Camera size={13} />}
-              Simpan Snapshot
+              Save Snapshot
             </button>
           </>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div className="info-box">
-            <span style={{ fontSize: 12 }}>Snapshot akan menangkap kondisi data QA saat ini. Data snapshot tidak akan berubah meskipun Anda memodifikasi test case setelahnya.</span>
+            <span style={{ fontSize: 12 }}>The snapshot will capture current QA data. Snapshot records remain unchanged even if you modify test cases afterwards.</span>
           </div>
           <div className="grid-2">
             <div className="form-group">
-              <label className="form-label">Tanggal Mulai Minggu <span style={{ color: 'var(--error)' }}>*</span></label>
+              <label className="form-label">Week Start Date <span style={{ color: 'var(--error)' }}>*</span></label>
               <input type="date" className="form-control" value={form.week_start}
                 onChange={e => setForm(p => ({ ...p, week_start: e.target.value }))} />
             </div>
             <div className="form-group">
-              <label className="form-label">Tanggal Akhir Minggu <span style={{ color: 'var(--error)' }}>*</span></label>
+              <label className="form-label">Week End Date <span style={{ color: 'var(--error)' }}>*</span></label>
               <input type="date" className="form-control" value={form.week_end}
                 onChange={e => setForm(p => ({ ...p, week_end: e.target.value }))} />
             </div>
           </div>
           <div className="form-group">
-            <label className="form-label">Aktivitas Minggu Ini</label>
+            <label className="form-label">This Week&apos;s Activities</label>
             <textarea className="form-control" rows={3}
-              placeholder="- Selesaikan test case untuk modul A&#10;- Eksekusi 15 test case regresi"
+              placeholder="- Complete test cases for Module A&#10;- Execute 15 regression test cases"
               value={form.activities} onChange={e => setForm(p => ({ ...p, activities: e.target.value }))} />
           </div>
           <div className="form-group">
-            <label className="form-label">Prioritas Minggu Depan</label>
+            <label className="form-label">Next Week&apos;s Priorities</label>
             <textarea className="form-control" rows={3}
-              placeholder="- Mulai testing modul B&#10;- Review defect terbuka"
+              placeholder="- Begin testing Module B&#10;- Review open defects"
               value={form.next_priorities} onChange={e => setForm(p => ({ ...p, next_priorities: e.target.value }))} />
           </div>
           <div className="form-group">
-            <label className="form-label">Catatan Tambahan</label>
+            <label className="form-label">Additional Notes</label>
             <textarea className="form-control" rows={2} value={form.notes}
               onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
           </div>

@@ -1,5 +1,6 @@
 import { getDb, logActivity, logChange } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,9 @@ export interface ImpactItem {
 
 export async function GET(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const { searchParams } = new URL(req.url);
     const moduleId = searchParams.get('moduleId');
@@ -32,6 +36,36 @@ export async function GET(req: NextRequest) {
     // 1. Fetch all requirements
     const modFilter = moduleId ? 'AND r.module_id = ?' : '';
     const modParams = moduleId ? [Number(moduleId)] : [];
+
+    interface RequirementWithMeta {
+      id: number;
+      ref_id: string;
+      title: string;
+      description: string | null;
+      change_type: string;
+      status: string;
+      version: number;
+      module_id: number;
+      feature_id: number;
+      created_at: string;
+      updated_at: string;
+      module_name: string | null;
+      feature_name: string | null;
+    }
+
+    interface TestCaseWithMeta {
+      id: number;
+      case_id: string;
+      module_id: number;
+      feature_id: number;
+      requirement_ref: string | null;
+      title: string;
+      lifecycle_status: string;
+      prep_status: string;
+      latest_result: string;
+      module_name: string | null;
+      feature_name: string | null;
+    }
 
     const requirements = db.prepare(`
       SELECT r.*,
@@ -42,7 +76,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN features f ON f.id = r.feature_id
       WHERE 1=1 ${modFilter}
       ORDER BY r.updated_at DESC
-    `).all(...modParams) as any[];
+    `).all(...modParams) as RequirementWithMeta[];
 
     // 2. Fetch all test cases
     const testCases = db.prepare(`
@@ -53,7 +87,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN modules m ON m.id = tc.module_id
       LEFT JOIN features f ON f.id = tc.feature_id
       WHERE tc.lifecycle_status != 'archived'
-    `).all() as any[];
+    `).all() as TestCaseWithMeta[];
 
     const impacts: ImpactItem[] = [];
 
@@ -83,7 +117,7 @@ export async function GET(req: NextRequest) {
               currentTestStatus: tc.lifecycle_status,
               currentPrepStatus: tc.prep_status,
               suggestedAction: 'obsolete',
-              reason: `Requirement ${req.ref_id} telah usang/diarsipkan. Test case ini harus ditandai obsolete agar tidak dieksekusi secara keliru.`,
+              reason: `Requirement ${req.ref_id} is obsolete/archived. This test case should be marked obsolete to prevent accidental execution.`,
               severity: 'high',
             });
           }
@@ -111,8 +145,8 @@ export async function GET(req: NextRequest) {
               currentPrepStatus: tc.prep_status,
               suggestedAction: req.change_type === 'scope_reduced' ? 'review' : 'update',
               reason: req.change_type === 'scope_reduced' 
-                ? `Cakupan requirement ${req.ref_id} dikurangi. Verifikasi apakah test case ini masih relevan atau perlu penyesuaian.`
-                : `Requirement ${req.ref_id} telah diperbarui ke versi ${req.version}. Perlu review langkah tes & expected result.`,
+                ? `Requirement ${req.ref_id} scope was reduced. Verify if this test case remains relevant or needs adjustments.`
+                : `Requirement ${req.ref_id} was updated to version ${req.version}. Test steps & expected result need review.`,
               severity: req.change_type === 'scope_reduced' ? 'medium' : 'high',
             });
           }
@@ -132,7 +166,7 @@ export async function GET(req: NextRequest) {
           moduleName: req.module_name || 'N/A',
           featureName: req.feature_name || 'N/A',
           suggestedAction: 'create_cases',
-          reason: `Requirement ${req.ref_id} belum memiliki test case sama sekali (Coverage Gap). Disarankan generate test case baru.`,
+          reason: `Requirement ${req.ref_id} has no test cases linked (Coverage Gap). Generating new test cases is recommended.`,
           severity: 'medium',
         });
       }
@@ -148,7 +182,7 @@ export async function GET(req: NextRequest) {
             id: `tc-${tc.id}-orphan`,
             requirementId: 0,
             requirementRef: tc.requirement_ref,
-            requirementTitle: 'Requirement tidak ditemukan',
+            requirementTitle: 'Requirement not found',
             requirementVersion: 0,
             changeType: 'removed',
             requirementStatus: 'missing',
@@ -160,7 +194,7 @@ export async function GET(req: NextRequest) {
             currentTestStatus: tc.lifecycle_status,
             currentPrepStatus: tc.prep_status,
             suggestedAction: 'review',
-            reason: `Test case merujuk ke requirement "${tc.requirement_ref}" yang sudah dihapus atau tidak terdaftar.`,
+            reason: `Test case references requirement "${tc.requirement_ref}" which has been deleted or is not registered.`,
             severity: 'low',
           });
         }
@@ -189,6 +223,9 @@ export async function GET(req: NextRequest) {
 // User-approved bulk resolution of impact items
 export async function POST(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const body = await req.json();
     const { action, testCaseIds, reason } = body as {
@@ -198,13 +235,19 @@ export async function POST(req: NextRequest) {
     };
 
     if (!testCaseIds || testCaseIds.length === 0) {
-      return NextResponse.json({ error: 'Tidak ada test case yang dipilih' }, { status: 400 });
+      return NextResponse.json({ error: 'No test cases selected' }, { status: 400 });
     }
 
     let updatedCount = 0;
 
     for (const tcId of testCaseIds) {
-      const tc = db.prepare('SELECT id, case_id, title, lifecycle_status, prep_status FROM test_cases WHERE id = ?').get(tcId) as any;
+      const tc = db.prepare('SELECT id, case_id, title, lifecycle_status, prep_status FROM test_cases WHERE id = ?').get(tcId) as {
+        id: number;
+        case_id: string;
+        title: string;
+        lifecycle_status: string;
+        prep_status: string;
+      } | undefined;
       if (!tc) continue;
 
       if (action === 'mark_obsolete') {
@@ -214,7 +257,7 @@ export async function POST(req: NextRequest) {
           WHERE id = ?
         `).run(tcId);
 
-        logActivity(db, 'obsolete_test_case', 'test_case', tcId, tc.case_id, `Menandai ${tc.case_id} sebagai Obsolete akibat perubahan requirement`);
+        logActivity(db, 'obsolete_test_case', 'test_case', tcId, tc.case_id, `Marked ${tc.case_id} as Obsolete due to requirement change`);
         logChange(db, {
           entityType: 'test_case',
           entityId: tcId,
@@ -222,7 +265,7 @@ export async function POST(req: NextRequest) {
           changeType: 'obsolete',
           oldValues: { lifecycle_status: tc.lifecycle_status },
           newValues: { lifecycle_status: 'obsolete' },
-          reason: reason || 'Di-obsolete berdasarkan analisis dampak requirement',
+          reason: reason || 'Marked obsolete based on requirement impact analysis',
         });
         updatedCount++;
       } else if (action === 'mark_review') {
@@ -232,7 +275,7 @@ export async function POST(req: NextRequest) {
           WHERE id = ?
         `).run(tcId);
 
-        logActivity(db, 'review_test_case', 'test_case', tcId, tc.case_id, `Menandai ${tc.case_id} perlu review persiapan akibat perubahan requirement`);
+        logActivity(db, 'review_test_case', 'test_case', tcId, tc.case_id, `Marked ${tc.case_id} for preparation review due to requirement change`);
         logChange(db, {
           entityType: 'test_case',
           entityId: tcId,
@@ -240,7 +283,7 @@ export async function POST(req: NextRequest) {
           changeType: 'review_required',
           oldValues: { prep_status: tc.prep_status },
           newValues: { prep_status: 'in_progress' },
-          reason: reason || 'Perlu review akibat perubahan requirement',
+          reason: reason || 'Review required due to requirement change',
         });
         updatedCount++;
       }

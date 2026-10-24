@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ResultBadge, LoadingSpinner, EmptyState, Pagination } from '@/components/ui/Shared';
 import { useToast } from '@/components/ui/Toast';
 import { Play, Download, Search } from 'lucide-react';
-import type { TestCase, Module, Feature } from '@/lib/types';
+import type { TestCase, Module, Feature, Execution } from '@/lib/types';
 
 export default function ExecutionPage() {
   const toast = useToast();
@@ -13,7 +14,7 @@ export default function ExecutionPage() {
   const [modules, setModules] = useState<Module[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
   const [loading, setLoading] = useState(true);
-  const [recentExecs, setRecentExecs] = useState<any[]>([]);
+  const [recentExecs, setRecentExecs] = useState<Execution[]>([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 20, totalPages: 1 });
   const [execCase, setExecCase] = useState<TestCase | null>(null);
   const [saving, setSaving] = useState(false);
@@ -21,7 +22,6 @@ export default function ExecutionPage() {
   const [execForm, setExecForm] = useState({ result: '', environment: '', actual_result: '', defect_ref: '', notes: '', is_retest: false });
 
   const fetchData = async (page = 1) => {
-    setLoading(true);
     const params = new URLSearchParams({
       page: String(page), limit: '20', prepStatus: filters.prepStatus || '',
       lifecycle: 'active',
@@ -54,7 +54,7 @@ export default function ExecutionPage() {
   };
 
   const saveExecution = async () => {
-    if (!execForm.result) { toast.error('Pilih hasil eksekusi'); return; }
+    if (!execForm.result) { toast.error('Select execution result'); return; }
     if (!execCase) return;
     setSaving(true);
     try {
@@ -63,7 +63,7 @@ export default function ExecutionPage() {
         body: JSON.stringify({ test_case_id: execCase.id, ...execForm })
       });
       if (res.ok) {
-        toast.success(`Eksekusi disimpan: ${execForm.result.toUpperCase()}`);
+        toast.success(`Execution saved: ${execForm.result.toUpperCase()}`);
         setExecCase(null);
         fetchData(pagination.page);
       }
@@ -72,42 +72,45 @@ export default function ExecutionPage() {
 
   return (
     <AppShell>
-      <div className="page-header">
+      <header className="page-header main-header">
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Play size={20} style={{ color: 'var(--success)' }} />
-            Eksekusi Test
+            Test Execution
           </h1>
-          <p className="page-subtitle">Catat hasil eksekusi test case</p>
+          <p className="page-subtitle">Record test case execution results</p>
         </div>
-        <button className="btn btn-secondary" onClick={() => window.open('/api/export?type=executions')}>
-          <Download size={14} /> Export Hasil
-        </button>
-      </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button className="btn btn-secondary" onClick={() => window.open('/api/export?type=executions')}>
+            <Download size={14} /> Export Results
+          </button>
+          <ThemeToggle />
+        </div>
+      </header>
 
       {/* Filters */}
       <div className="card card-sm" style={{ marginBottom: 16 }}>
         <div className="filters-bar">
           <div className="search-bar" style={{ flex: 1, minWidth: 180 }}>
             <Search size={14} className="search-icon" />
-            <input className="form-control" placeholder="Cari test case..." value={filters.search}
+            <input className="form-control" placeholder="Search test cases..." value={filters.search}
               onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} />
           </div>
           <select className="form-control" style={{ width: 160 }} value={filters.moduleId}
             onChange={e => setFilters(p => ({ ...p, moduleId: e.target.value, featureId: '' }))}>
-            <option value="">Semua Modul</option>
+            <option value="">All Modules</option>
             {modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
           <select className="form-control" style={{ width: 160 }} value={filters.featureId}
             onChange={e => setFilters(p => ({ ...p, featureId: e.target.value }))}>
-            <option value="">Semua Fitur</option>
+            <option value="">All Features</option>
             {filteredFeatures.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
           <select className="form-control" style={{ width: 160 }} value={filters.prepStatus}
             onChange={e => setFilters(p => ({ ...p, prepStatus: e.target.value }))}>
-            <option value="">Semua Status Prep</option>
-            <option value="ready">Siap Dieksekusi</option>
-            <option value="in_progress">Sedang Disiapkan</option>
+            <option value="">All Prep Statuses</option>
+            <option value="ready">Ready for Execution</option>
+            <option value="in_progress">In Progress</option>
             <option value="draft">Draft</option>
           </select>
         </div>
@@ -119,8 +122,8 @@ export default function ExecutionPage() {
           {loading ? <LoadingSpinner /> : testCases.length === 0 ? (
             <EmptyState
               icon={<Play size={28} />}
-              title="Tidak ada test case"
-              description="Ubah filter atau tandai test case sebagai 'Siap Dieksekusi'"
+              title="No test cases found"
+              description="Change filters or mark test cases as 'Ready for Execution'"
             />
           ) : (
             <>
@@ -129,11 +132,11 @@ export default function ExecutionPage() {
                   <thead>
                     <tr>
                       <th>ID</th>
-                      <th>Judul</th>
-                      <th>Modul / Fitur</th>
-                      <th>Prioritas</th>
-                      <th>Hasil Terakhir</th>
-                      <th>Aksi</th>
+                      <th>Title</th>
+                      <th>Module / Feature</th>
+                      <th>Priority</th>
+                      <th>Latest Result</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -159,7 +162,7 @@ export default function ExecutionPage() {
                             onClick={() => openExec(tc)}
                             id={`btn-exec-${tc.id}`}
                           >
-                            <Play size={12} /> Eksekusi
+                            <Play size={12} /> Execute
                           </button>
                         </td>
                       </tr>
@@ -184,7 +187,7 @@ export default function ExecutionPage() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div className="form-group">
-                  <label className="form-label">Hasil <span style={{ color: 'var(--error)' }}>*</span></label>
+                  <label className="form-label">Result <span style={{ color: 'var(--error)' }}>*</span></label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     {[
                       { value: 'pass', label: '✅ Pass', color: 'var(--success)' },
@@ -210,16 +213,16 @@ export default function ExecutionPage() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Actual Result</label>
-                  <textarea className="form-control" rows={3} placeholder="Apa yang terjadi sebenarnya"
+                  <textarea className="form-control" rows={3} placeholder="What actually occurred"
                     value={execForm.actual_result} onChange={e => setExecForm(p => ({ ...p, actual_result: e.target.value }))} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Referensi Defect</label>
+                  <label className="form-label">Defect Reference</label>
                   <input className="form-control" placeholder="BUG-001"
                     value={execForm.defect_ref} onChange={e => setExecForm(p => ({ ...p, defect_ref: e.target.value }))} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Catatan</label>
+                  <label className="form-label">Notes</label>
                   <textarea className="form-control" rows={2}
                     value={execForm.notes} onChange={e => setExecForm(p => ({ ...p, notes: e.target.value }))} />
                 </div>
@@ -229,9 +232,9 @@ export default function ExecutionPage() {
                   <label htmlFor="exec-retest" style={{ fontSize: 13 }}>Retest</label>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-secondary" onClick={() => setExecCase(null)} style={{ flex: 1 }}>Batal</button>
+                  <button className="btn btn-secondary" onClick={() => setExecCase(null)} style={{ flex: 1 }}>Cancel</button>
                   <button className="btn btn-primary" onClick={saveExecution} disabled={saving || !execForm.result} style={{ flex: 1 }} id="btn-confirm-execution">
-                    {saving ? <span className="spinner" /> : 'Simpan'}
+                    {saving ? <span className="spinner" /> : 'Save'}
                   </button>
                 </div>
               </div>
@@ -240,8 +243,8 @@ export default function ExecutionPage() {
             <div className="card">
               <div className="empty-state" style={{ padding: '30px 20px' }}>
                 <div className="empty-icon"><Play size={22} /></div>
-                <div className="empty-title" style={{ fontSize: 14 }}>Pilih test case</div>
-                <div className="empty-desc" style={{ fontSize: 12 }}>Klik tombol Eksekusi pada baris test case</div>
+                <div className="empty-title" style={{ fontSize: 14 }}>Select a test case</div>
+                <div className="empty-desc" style={{ fontSize: 12 }}>Click the Execute button on any test case row</div>
               </div>
             </div>
           )}
@@ -249,14 +252,14 @@ export default function ExecutionPage() {
           {/* Recent Executions */}
           {recentExecs.length > 0 && (
             <div className="card">
-              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>Eksekusi Terbaru</div>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>Recent Executions</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {recentExecs.slice(0, 8).map((ex: any) => (
+                {recentExecs.slice(0, 8).map(ex => (
                   <div key={ex.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{ex.case_id}</div>
                       <div style={{ fontSize: 11, color: 'var(--foreground-muted)' }}>
-                        {new Date(ex.exec_date).toLocaleDateString('id-ID')}
+                        {new Date(ex.exec_date).toLocaleDateString('en-US')}
                         {ex.environment && ` · ${ex.environment}`}
                       </div>
                     </div>

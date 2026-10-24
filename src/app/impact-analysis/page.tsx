@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { EmptyState, LoadingSpinner } from '@/components/ui/Shared';
 import { useToast } from '@/components/ui/Toast';
@@ -57,7 +58,6 @@ export default function ImpactAnalysisPage() {
   } | null>(null);
 
   const fetchImpacts = async () => {
-    setLoading(true);
     try {
       const params = new URLSearchParams({
         ...(selectedModule && { moduleId: selectedModule }),
@@ -115,14 +115,14 @@ export default function ImpactAnalysisPage() {
     }
 
     if (ids.length === 0) {
-      toast.error('Pilih setidaknya satu item test case yang valid');
+      toast.error('Select at least one valid test case item');
       return;
     }
 
     setPendingAction({
       action,
       testCaseIds: ids,
-      label: action === 'mark_obsolete' ? 'Tandai Obsolete' : 'Tandai Perlu Review Persiapan',
+      label: action === 'mark_obsolete' ? 'Mark Obsolete' : 'Mark for Preparation Review',
     });
   };
 
@@ -141,12 +141,12 @@ export default function ImpactAnalysisPage() {
 
       if (res.ok) {
         const data = await res.json();
-        toast.success(`Berhasil menerapkan ${pendingAction.label} untuk ${data.updatedCount} test case`);
+        toast.success(`Successfully applied ${pendingAction.label} to ${data.updatedCount} test case${data.updatedCount === 1 ? '' : 's'}`);
         setPendingAction(null);
         setSelectedIds(new Set());
         fetchImpacts();
       } else {
-        toast.error('Gagal menerapkan rekomendasi');
+        toast.error('Failed to apply recommendation');
       }
     } finally {
       setApplying(false);
@@ -155,27 +155,28 @@ export default function ImpactAnalysisPage() {
 
   return (
     <AppShell>
-      <div className="page-header">
+      <header className="page-header main-header">
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <AlertTriangle size={20} style={{ color: 'var(--warning)' }} />
-            Analisis Dampak Perubahan (Impact Analysis)
+            Change Impact Analysis
           </h1>
           <p className="page-subtitle">
-            Deteksi otomatis requirement yang ditambah, diubah, atau dihapus, dan evaluasi dampaknya ke test case
+            Automatically detect added, changed, or deleted requirements and evaluate impact on test cases
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-secondary" onClick={fetchImpacts}>
-            <RefreshCw size={14} /> Analisis Ulang
+            <RefreshCw size={14} /> Re-analyze
           </button>
+          <ThemeToggle />
         </div>
-      </div>
+      </header>
 
       {/* Safety Banner */}
       <div className="info-box" style={{ marginBottom: 20 }}>
         <span style={{ fontSize: 13 }}>
-          🛡️ <strong>Prinsip Keamanan AI & QA:</strong> Rekomendasi di bawah ini tidak akan pernah mengubah atau meng-obsolete test case secara otomatis. Setiap tindakan memerlukan persetujuan dan konfirmasi eksplisit dari Anda.
+          🛡️ <strong>AI & QA Safety Principle:</strong> Recommendations below will never automatically modify or obsolete test cases. Every action requires your explicit review and approval.
         </span>
       </div>
 
@@ -183,30 +184,30 @@ export default function ImpactAnalysisPage() {
       <div className="grid-4" style={{ marginBottom: 24 }}>
         <div className="metric-card" style={{ cursor: 'pointer', border: filterAction === 'all' ? '1px solid var(--primary)' : undefined }}
              onClick={() => setFilterAction('all')}>
-          <div className="metric-label">Total Dampak Terdeteksi</div>
+          <div className="metric-label">Total Impacts Detected</div>
           <div className="metric-value">{stats.totalImpacts}</div>
-          <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Semua rekomendasi</div>
+          <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>All recommendations</div>
         </div>
 
         <div className="metric-card" style={{ cursor: 'pointer', border: filterAction === 'obsolete' ? '1px solid var(--error)' : undefined }}
              onClick={() => setFilterAction('obsolete')}>
-          <div className="metric-label" style={{ color: 'var(--error)' }}>Perlu Obsolete</div>
+          <div className="metric-label" style={{ color: 'var(--error)' }}>Requires Obsolete</div>
           <div className="metric-value" style={{ color: 'var(--error)' }}>{stats.needObsolete}</div>
-          <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Req usang / dihapus</div>
+          <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Req obsolete / deleted</div>
         </div>
 
         <div className="metric-card" style={{ cursor: 'pointer', border: filterAction === 'update' ? '1px solid var(--primary)' : undefined }}
              onClick={() => setFilterAction('update')}>
-          <div className="metric-label" style={{ color: 'var(--primary)' }}>Perlu Update Langkah</div>
+          <div className="metric-label" style={{ color: 'var(--primary)' }}>Requires Step Update</div>
           <div className="metric-value" style={{ color: 'var(--primary)' }}>{stats.needUpdate}</div>
-          <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Req versi baru / diubah</div>
+          <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Req new version / modified</div>
         </div>
 
         <div className="metric-card" style={{ cursor: 'pointer', border: filterAction === 'create_cases' ? '1px solid var(--warning)' : undefined }}
              onClick={() => setFilterAction('create_cases')}>
-          <div className="metric-label" style={{ color: 'var(--warning)' }}>Kesenjangan Cakupan</div>
+          <div className="metric-label" style={{ color: 'var(--warning)' }}>Coverage Gap</div>
           <div className="metric-value" style={{ color: 'var(--warning)' }}>{stats.needCreation}</div>
-          <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Req tanpa test case</div>
+          <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Req without test cases</div>
         </div>
       </div>
 
@@ -220,7 +221,7 @@ export default function ImpactAnalysisPage() {
               value={selectedModule}
               onChange={e => setSelectedModule(e.target.value)}
             >
-              <option value="">Semua Modul</option>
+              <option value="">All Modules</option>
               {modules.map(m => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
@@ -232,11 +233,11 @@ export default function ImpactAnalysisPage() {
               value={filterAction}
               onChange={e => setFilterAction(e.target.value)}
             >
-              <option value="all">Semua Jenis Dampak</option>
-              <option value="obsolete">Perlu Obsolete</option>
-              <option value="update">Perlu Update Langkah</option>
-              <option value="create_cases">Kesenjangan Cakupan</option>
-              <option value="review">Perlu Review / Scope</option>
+              <option value="all">All Impact Types</option>
+              <option value="obsolete">Requires Obsolete</option>
+              <option value="update">Requires Step Update</option>
+              <option value="create_cases">Coverage Gap</option>
+              <option value="review">Requires Review / Scope</option>
             </select>
           </div>
 
@@ -244,19 +245,19 @@ export default function ImpactAnalysisPage() {
           {selectedIds.size > 0 && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>
-                {selectedIds.size} dipilih:
+                {selectedIds.size} selected:
               </span>
               <button
                 className="btn btn-sm btn-danger"
                 onClick={() => promptApplyAction('mark_obsolete')}
               >
-                Tandai Obsolete ({selectedIds.size})
+                Mark Obsolete ({selectedIds.size})
               </button>
               <button
                 className="btn btn-sm btn-secondary"
                 onClick={() => promptApplyAction('mark_review')}
               >
-                Tandai Perlu Review ({selectedIds.size})
+                Mark for Review ({selectedIds.size})
               </button>
             </div>
           )}
@@ -269,11 +270,11 @@ export default function ImpactAnalysisPage() {
       ) : filteredImpacts.length === 0 ? (
         <EmptyState
           icon={<CheckCircle size={32} style={{ color: 'var(--success)' }} />}
-          title="Semua Test Case Selaras!"
-          description="Tidak ditemukan dampak perubahan yang belum diselesaikan. Semua test case selaras dengan requirement saat ini."
+          title="All Test Cases Aligned!"
+          description="No pending change impacts found. All test cases are aligned with current requirements."
           action={
             <Link href="/requirements" className="btn btn-secondary">
-              Kelola Requirements
+              Manage Requirements
             </Link>
           }
         />
@@ -290,11 +291,11 @@ export default function ImpactAnalysisPage() {
                   />
                 </th>
                 <th style={{ width: 130 }}>Requirement</th>
-                <th style={{ width: 160 }}>Modul / Fitur</th>
-                <th>Test Case Terdampak</th>
-                <th style={{ width: 150 }}>Rekomendasi</th>
-                <th>Alasan Analisis</th>
-                <th style={{ width: 140, textAlign: 'right' }}>Aksi Persetujuan</th>
+                <th style={{ width: 160 }}>Module / Feature</th>
+                <th>Impacted Test Case</th>
+                <th style={{ width: 150 }}>Recommendation</th>
+                <th>Analysis Reason</th>
+                <th style={{ width: 140, textAlign: 'right' }}>Approval Action</th>
               </tr>
             </thead>
             <tbody>
@@ -338,22 +339,22 @@ export default function ImpactAnalysisPage() {
                       </div>
                     ) : (
                       <div style={{ fontSize: 12, color: 'var(--warning)', fontStyle: 'italic' }}>
-                        ⚠️ Belum ada test case untuk requirement ini
+                        ⚠️ No test case for this requirement yet
                       </div>
                     )}
                   </td>
                   <td>
                     {item.suggestedAction === 'obsolete' && (
-                      <span className="badge badge-error">Tandai Obsolete</span>
+                      <span className="badge badge-error">Mark Obsolete</span>
                     )}
                     {item.suggestedAction === 'update' && (
-                      <span className="badge badge-primary">Update Langkah Tes</span>
+                      <span className="badge badge-primary">Update Test Steps</span>
                     )}
                     {item.suggestedAction === 'create_cases' && (
-                      <span className="badge badge-warning">Buat Case Baru</span>
+                      <span className="badge badge-warning">Create New Cases</span>
                     )}
                     {item.suggestedAction === 'review' && (
-                      <span className="badge badge-muted">Review Cakupan</span>
+                      <span className="badge badge-muted">Review Coverage</span>
                     )}
                   </td>
                   <td>
@@ -375,21 +376,21 @@ export default function ImpactAnalysisPage() {
                         className="btn btn-danger btn-sm"
                         onClick={() => promptApplyAction('mark_obsolete', item.testCaseId)}
                       >
-                        Setujui Obsolete
+                        Approve Obsolete
                       </button>
                     ) : item.testCaseId ? (
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
                         <button
                           className="btn btn-secondary btn-sm"
                           onClick={() => promptApplyAction('mark_review', item.testCaseId)}
-                          title="Tandai test case sebagai sedang disiapkan / review"
+                          title="Mark test case as in progress / review"
                         >
-                          Tandai Review
+                          Mark Review
                         </button>
                         <Link
                           href={`/test-cases?search=${encodeURIComponent(item.caseId || '')}`}
                           className="btn btn-secondary btn-icon btn-sm"
-                          title="Buka Test Case"
+                          title="Open Test Case"
                         >
                           <Eye size={12} />
                         </Link>
@@ -408,9 +409,9 @@ export default function ImpactAnalysisPage() {
         isOpen={Boolean(pendingAction)}
         onClose={() => setPendingAction(null)}
         onConfirm={handleConfirmApproval}
-        title={`Konfirmasi Persetujuan: ${pendingAction?.label}`}
-        message={`Apakah Anda menyetujui penerapan tindakan "${pendingAction?.label}" terhadap ${pendingAction?.testCaseIds.length} test case terpilih? Riwayat perubahan akan dicatat secara otomatis.`}
-        confirmLabel={applying ? 'Menerapkan...' : 'Ya, Setujui & Terapkan'}
+        title={`Approval Confirmation: ${pendingAction?.label}`}
+        message={`Do you approve applying "${pendingAction?.label}" to ${pendingAction?.testCaseIds.length} selected test case(s)? Change history will be recorded automatically.`}
+        confirmLabel={applying ? 'Applying...' : 'Yes, Approve & Apply'}
         danger={pendingAction?.action === 'mark_obsolete'}
         loading={applying}
       />

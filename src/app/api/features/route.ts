@@ -1,10 +1,14 @@
 import { getDb, logActivity, logChange } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa', 'dev_pm']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const { searchParams } = new URL(req.url);
     const moduleId = searchParams.get('moduleId');
@@ -35,16 +39,19 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const body = await req.json();
     const { module_id, name, description } = body;
 
     if (!module_id || !name?.trim()) {
-      return NextResponse.json({ error: 'Module dan nama fitur wajib diisi' }, { status: 400 });
+      return NextResponse.json({ error: 'Module and feature name are required' }, { status: 400 });
     }
 
     const mod = db.prepare('SELECT * FROM modules WHERE id = ?').get(Number(module_id)) as { prefix: string } | undefined;
-    if (!mod) return NextResponse.json({ error: 'Modul tidak ditemukan' }, { status: 404 });
+    if (!mod) return NextResponse.json({ error: 'Module not found' }, { status: 404 });
 
     const result = db.prepare(`
       INSERT INTO features (module_id, name, description, status)
@@ -52,7 +59,7 @@ export async function POST(req: NextRequest) {
     `).run(Number(module_id), name.trim(), description?.trim() || null);
 
     const featureId = result.lastInsertRowid as number;
-    logActivity(db, 'created', 'feature', featureId, name.trim(), `Fitur "${name}" dibuat dalam modul ${mod.prefix}`);
+    logActivity(db, 'created', 'feature', featureId, name.trim(), `Feature "${name}" created in module ${mod.prefix}`);
     logChange(db, {
       entityType: 'feature', entityId: featureId, entityRef: name.trim(),
       changeType: 'created', newValues: body

@@ -2,33 +2,92 @@
 
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ResultBadge, LoadingSpinner, EmptyState, ProgressBar } from '@/components/ui/Shared';
 import {
   FileText, Calendar, Filter, Printer, Download,
   CheckCircle2, XCircle, ShieldAlert, Activity, Bug, ArrowRight
 } from 'lucide-react';
 import Link from 'next/link';
-import type { Module, Feature } from '@/lib/types';
+import type { Module, Feature, TestResult } from '@/lib/types';
+
+interface DefectItem {
+  defect_ref: string;
+  case_id: string;
+  title: string;
+  result: TestResult;
+  environment: string | null;
+  actual_result: string | null;
+  notes: string | null;
+}
+
+interface PeriodExecutionItem {
+  id: number;
+  test_case_id: number;
+  exec_date: string;
+  environment: string | null;
+  actual_result: string | null;
+  result: TestResult;
+  defect_ref: string | null;
+  notes: string | null;
+  is_retest: number;
+  case_id: string;
+  title: string;
+  priority: string;
+  requirement_ref: string | null;
+  module_name: string | null;
+  feature_name: string | null;
+}
+
+interface ReportData {
+  period: string;
+  startDate: string;
+  endDate: string;
+  currentTotals: {
+    active: number;
+    ready: number;
+    obsolete: number;
+  };
+  periodMetrics: {
+    totalExecutions: number;
+    pass: number;
+    fail: number;
+    blocked: number;
+    passRate: number | null;
+    retests: number;
+    tcCreated: number;
+    tcUpdated: number;
+    tcObsolete: number;
+    reqChanges: number;
+  };
+  byModule: Array<{
+    module: string;
+    total: number;
+    pass: number;
+    fail: number;
+    blocked: number;
+  }>;
+  defects: DefectItem[];
+  executions: PeriodExecutionItem[];
+}
 
 export default function ReportsPage() {
   const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('weekly');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [moduleId, setModuleId] = useState('');
   const [featureId, setFeatureId] = useState('');
   const [modules, setModules] = useState<Module[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
-  const [reportData, setReportData] = useState<any>(null);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize dates
+  // Fetch modules and features
   useEffect(() => {
-    const now = new Date();
-    const fmt = (d: Date) => d.toISOString().split('T')[0];
-    const past7 = new Date(now); past7.setDate(past7.getDate() - 7);
-    setStartDate(fmt(past7));
-    setEndDate(fmt(now));
-
     fetch('/api/modules').then(r => r.json()).then(setModules);
     fetch('/api/features').then(r => r.json()).then(setFeatures);
   }, []);
@@ -54,7 +113,6 @@ export default function ReportsPage() {
 
   const fetchReport = async () => {
     if (!startDate || !endDate) return;
-    setLoading(true);
     try {
       const params = new URLSearchParams({
         period,
@@ -86,22 +144,23 @@ export default function ReportsPage() {
 
   return (
     <AppShell>
-      <div className="page-header">
+      <header className="page-header main-header">
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <FileText size={20} style={{ color: 'var(--primary)' }} />
-            Laporan QA Berdasarkan Periode
+            QA Period Reports
           </h1>
           <p className="page-subtitle">
-            Laporan harian, mingguan, bulanan, atau rentang tanggal kustom yang membedakan kondisi riil saat ini dari aktivitas periode
+            Daily, weekly, monthly, or custom date range reports distinguishing current actual state from period activities
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-secondary" onClick={handlePrint} id="btn-print-report">
-            <Printer size={14} /> Cetak / Simpan PDF
+            <Printer size={14} /> Print / Save PDF
           </button>
+          <ThemeToggle />
         </div>
-      </div>
+      </header>
 
       {/* Filter and Period Selection */}
       <div className="card card-sm" style={{ marginBottom: 20 }}>
@@ -109,15 +168,15 @@ export default function ReportsPage() {
           {/* Period tabs */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {[
-              { id: 'daily', label: 'Hari Ini (Harian)' },
-              { id: 'weekly', label: '7 Hari Terakhir (Mingguan)' },
-              { id: 'monthly', label: '30 Hari Terakhir (Bulanan)' },
-              { id: 'custom', label: 'Rentang Khusus (Custom)' },
+              { id: 'daily', label: 'Today (Daily)' },
+              { id: 'weekly', label: 'Last 7 Days (Weekly)' },
+              { id: 'monthly', label: 'Last 30 Days (Monthly)' },
+              { id: 'custom', label: 'Custom Range' },
             ].map(tab => (
               <button
                 key={tab.id}
                 className={`btn btn-sm ${period === tab.id ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => handlePeriodChange(tab.id as any)}
+                onClick={() => handlePeriodChange(tab.id as 'daily' | 'weekly' | 'monthly' | 'custom')}
               >
                 {tab.label}
               </button>
@@ -127,7 +186,7 @@ export default function ReportsPage() {
           {/* Date Picker & Module Filters */}
           <div className="filters-bar" style={{ paddingTop: 8, borderTop: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>Dari:</span>
+              <span style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>From:</span>
               <input
                 type="date"
                 className="form-control"
@@ -135,7 +194,7 @@ export default function ReportsPage() {
                 value={startDate}
                 onChange={e => { setPeriod('custom'); setStartDate(e.target.value); }}
               />
-              <span style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>Sampai:</span>
+              <span style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>To:</span>
               <input
                 type="date"
                 className="form-control"
@@ -151,7 +210,7 @@ export default function ReportsPage() {
               value={moduleId}
               onChange={e => { setModuleId(e.target.value); setFeatureId(''); }}
             >
-              <option value="">Semua Modul</option>
+              <option value="">All Modules</option>
               {modules.map(m => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
@@ -163,7 +222,7 @@ export default function ReportsPage() {
               value={featureId}
               onChange={e => setFeatureId(e.target.value)}
             >
-              <option value="">Semua Fitur</option>
+              <option value="">All Features</option>
               {filteredFeatures.map(f => (
                 <option key={f.id} value={f.id}>{f.name}</option>
               ))}
@@ -175,31 +234,31 @@ export default function ReportsPage() {
       {loading ? (
         <LoadingSpinner size="lg" />
       ) : !reportData ? (
-        <EmptyState title="Gagal memuat laporan" description="Silakan periksa filter tanggal Anda" />
+        <EmptyState title="Failed to load report" description="Please check your date filters" />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* Section A: Current Totals */}
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--foreground-muted)', marginBottom: 12 }}>
-              A. Kondisi Akumulatif Saat Ini (Current Totals)
+              A. Current Cumulative Totals
             </div>
             <div className="grid-3">
               <div className="metric-card">
-                <div className="metric-label">Total Test Case Aktif</div>
+                <div className="metric-label">Total Active Test Cases</div>
                 <div className="metric-value">{reportData.currentTotals.active}</div>
-                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Kondisi tersimpan di DB</div>
+                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Current state in DB</div>
               </div>
 
               <div className="metric-card">
-                <div className="metric-label" style={{ color: 'var(--success)' }}>Siap Dieksekusi</div>
+                <div className="metric-label" style={{ color: 'var(--success)' }}>Ready for Execution</div>
                 <div className="metric-value" style={{ color: 'var(--success)' }}>{reportData.currentTotals.ready}</div>
-                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Status persiapan: Ready</div>
+                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Preparation status: Ready</div>
               </div>
 
               <div className="metric-card">
-                <div className="metric-label" style={{ color: 'var(--foreground-muted)' }}>Test Case Usang (Obsolete)</div>
+                <div className="metric-label" style={{ color: 'var(--foreground-muted)' }}>Obsolete Test Cases</div>
                 <div className="metric-value">{reportData.currentTotals.obsolete}</div>
-                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Dikecualikan dari run aktif</div>
+                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Excluded from active runs</div>
               </div>
             </div>
           </div>
@@ -207,32 +266,32 @@ export default function ReportsPage() {
           {/* Section B: Activities during selected period */}
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--foreground-muted)', marginBottom: 12 }}>
-              B. Aktivitas Pengujian Selama Periode ({new Date(reportData.startDate).toLocaleDateString('id-ID')} s/d {new Date(reportData.endDate).toLocaleDateString('id-ID')})
+              B. Testing Activities During Period ({new Date(reportData.startDate).toLocaleDateString('en-US')} to {new Date(reportData.endDate).toLocaleDateString('en-US')})
             </div>
 
             <div className="grid-4" style={{ marginBottom: 16 }}>
               <div className="metric-card">
-                <div className="metric-label">Eksekusi Dijalankan</div>
+                <div className="metric-label">Executions Run</div>
                 <div className="metric-value">{reportData.periodMetrics.totalExecutions}</div>
                 <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
-                  {reportData.periodMetrics.retests} di antaranya retest
+                  {reportData.periodMetrics.retests} retests included
                 </div>
               </div>
 
               <div className="metric-card">
-                <div className="metric-label" style={{ color: 'var(--success)' }}>Lolos (Pass)</div>
+                <div className="metric-label" style={{ color: 'var(--success)' }}>Passed</div>
                 <div className="metric-value" style={{ color: 'var(--success)' }}>{reportData.periodMetrics.pass}</div>
                 <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
-                  Pass rate periode: {reportData.periodMetrics.passRate != null ? `${reportData.periodMetrics.passRate}%` : 'N/A'}
+                  Period pass rate: {reportData.periodMetrics.passRate != null ? `${reportData.periodMetrics.passRate}%` : 'N/A'}
                 </div>
               </div>
 
               <div className="metric-card">
-                <div className="metric-label" style={{ color: 'var(--error)' }}>Gagal (Fail)</div>
+                <div className="metric-label" style={{ color: 'var(--error)' }}>Failed</div>
                 <div className="metric-value" style={{ color: reportData.periodMetrics.fail > 0 ? 'var(--error)' : 'var(--foreground)' }}>
                   {reportData.periodMetrics.fail}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Memerlukan perbaikan</div>
+                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Requires defect fix</div>
               </div>
 
               <div className="metric-card">
@@ -240,14 +299,14 @@ export default function ReportsPage() {
                 <div className="metric-value" style={{ color: reportData.periodMetrics.blocked > 0 ? 'var(--warning)' : 'var(--foreground)' }}>
                   {reportData.periodMetrics.blocked}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Terkendala blocker</div>
+                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Blocked by dependency</div>
               </div>
             </div>
 
             {/* Change Metrics During Period */}
             <div className="card">
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-                🔄 Perubahan Aset QA Selama Periode Ini:
+                🔄 QA Asset Changes During This Period:
               </div>
               <div className="grid-4">
                 <div style={{ padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 8 }}>
@@ -255,7 +314,7 @@ export default function ReportsPage() {
                     +{reportData.periodMetrics.tcCreated}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--foreground-muted)', marginTop: 2 }}>
-                    Test Case Baru Dibuat
+                    New Test Cases Created
                   </div>
                 </div>
 
@@ -264,7 +323,7 @@ export default function ReportsPage() {
                     {reportData.periodMetrics.tcUpdated}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--foreground-muted)', marginTop: 2 }}>
-                    Test Case Diperbarui
+                    Test Cases Updated
                   </div>
                 </div>
 
@@ -273,7 +332,7 @@ export default function ReportsPage() {
                     {reportData.periodMetrics.tcObsolete}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--foreground-muted)', marginTop: 2 }}>
-                    Test Case Di-Obsolete
+                    Test Cases Marked Obsolete
                   </div>
                 </div>
 
@@ -282,7 +341,7 @@ export default function ReportsPage() {
                     {reportData.periodMetrics.reqChanges}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--foreground-muted)', marginTop: 2 }}>
-                    Perubahan Requirement
+                    Requirement Changes
                   </div>
                 </div>
               </div>
@@ -293,22 +352,22 @@ export default function ReportsPage() {
           {reportData.defects && reportData.defects.length > 0 && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--foreground-muted)', marginBottom: 12 }}>
-                C. Daftar Temuan Defect / Bug Selama Periode ({reportData.defects.length})
+                C. Defects / Bugs Identified During Period ({reportData.defects.length})
               </div>
               <div className="table-container">
                 <table>
                   <thead>
                     <tr>
-                      <th style={{ width: 120 }}>Ref Defect</th>
+                      <th style={{ width: 120 }}>Defect Ref</th>
                       <th style={{ width: 110 }}>Test Case</th>
-                      <th>Judul Test Case</th>
-                      <th style={{ width: 90 }}>Hasil</th>
+                      <th>Test Case Title</th>
+                      <th style={{ width: 90 }}>Result</th>
                       <th style={{ width: 120 }}>Environment</th>
-                      <th>Temuan Aktual / Catatan</th>
+                      <th>Actual Findings / Notes</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {reportData.defects.map((def: any, idx: number) => (
+                    {reportData.defects.map((def, idx: number) => (
                       <tr key={idx}>
                         <td><code style={{ color: 'var(--error)', fontWeight: 700 }}>{def.defect_ref}</code></td>
                         <td><code>{def.case_id}</code></td>
@@ -329,32 +388,32 @@ export default function ReportsPage() {
           {/* Section D: Execution Log during period */}
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--foreground-muted)', marginBottom: 12 }}>
-              D. Log Eksekusi pada Periode Ini ({reportData.executions?.length || 0})
+              D. Execution Log During This Period ({reportData.executions?.length || 0})
             </div>
             {reportData.executions?.length === 0 ? (
               <div className="card" style={{ textAlign: 'center', padding: '30px', color: 'var(--foreground-muted)' }}>
-                Tidak ada eksekusi tercatat dalam rentang tanggal ini.
+                No executions recorded in this date range.
               </div>
             ) : (
               <div className="table-container">
                 <table>
                   <thead>
                     <tr>
-                      <th style={{ width: 140 }}>Waktu Eksekusi</th>
+                      <th style={{ width: 140 }}>Execution Time</th>
                       <th style={{ width: 100 }}>Case ID</th>
-                      <th>Judul Test Case</th>
-                      <th style={{ width: 140 }}>Modul / Fitur</th>
-                      <th style={{ width: 90 }}>Hasil</th>
+                      <th>Test Case Title</th>
+                      <th style={{ width: 140 }}>Module / Feature</th>
+                      <th style={{ width: 90 }}>Result</th>
                       <th style={{ width: 110 }}>Environment</th>
                       <th style={{ width: 80 }}>Retest?</th>
-                      <th>Catatan / Defect</th>
+                      <th>Notes / Defect</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {reportData.executions.map((ex: any) => (
+                    {reportData.executions.map(ex => (
                       <tr key={ex.id}>
                         <td style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
-                          {new Date(ex.exec_date).toLocaleString('id-ID')}
+                          {new Date(ex.exec_date).toLocaleString('en-US')}
                         </td>
                         <td><code style={{ fontSize: 12 }}>{ex.case_id}</code></td>
                         <td style={{ fontWeight: 500, fontSize: 13 }}>{ex.title}</td>

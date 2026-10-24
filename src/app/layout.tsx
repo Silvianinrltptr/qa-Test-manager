@@ -11,13 +11,27 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "QA Test Manager",
-  description: "Aplikasi manajemen test case dan pelacakan progres QA pribadi",
+  title: "QA Studio",
+  description: "Test Management Workspace",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="id" className={`${inter.variable} h-full`}>
+    <html lang="en" className={`${inter.variable} h-full`} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('qastudio-theme') || localStorage.getItem('testbloom-theme') || 'light';
+                  document.documentElement.setAttribute('data-theme', theme);
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className="h-full">
         <ToastProvider>
           {children}

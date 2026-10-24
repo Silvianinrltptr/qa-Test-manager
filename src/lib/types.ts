@@ -60,6 +60,7 @@ export interface TestCase {
   module_name?: string;
   feature_name?: string;
   module_prefix?: string;
+  comment_count?: number;
 }
 
 export interface Execution {
@@ -160,36 +161,36 @@ export interface Requirement {
 }
 
 export const TEST_TYPES: { value: TestType; label: string }[] = [
-  { value: 'functional', label: 'Fungsional' },
-  { value: 'regression', label: 'Regresi' },
+  { value: 'functional', label: 'Functional' },
+  { value: 'regression', label: 'Regression' },
   { value: 'smoke', label: 'Smoke Test' },
   { value: 'boundary', label: 'Boundary' },
-  { value: 'negative', label: 'Negatif' },
-  { value: 'validation', label: 'Validasi' },
-  { value: 'permission', label: 'Perizinan' },
-  { value: 'integration', label: 'Integrasi' },
+  { value: 'negative', label: 'Negative' },
+  { value: 'validation', label: 'Validation' },
+  { value: 'permission', label: 'Permission' },
+  { value: 'integration', label: 'Integration' },
   { value: 'uat', label: 'UAT' },
-  { value: 'performance', label: 'Performa' },
-  { value: 'other', label: 'Lainnya' },
+  { value: 'performance', label: 'Performance' },
+  { value: 'other', label: 'Other' },
 ];
 
 export const PRIORITIES: { value: Priority; label: string }[] = [
-  { value: 'critical', label: 'Kritis' },
-  { value: 'high', label: 'Tinggi' },
-  { value: 'medium', label: 'Sedang' },
-  { value: 'low', label: 'Rendah' },
+  { value: 'critical', label: 'Critical' },
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' },
 ];
 
 export const PREP_STATUSES: { value: PrepStatus; label: string }[] = [
   { value: 'draft', label: 'Draft' },
-  { value: 'in_progress', label: 'Sedang Disiapkan' },
-  { value: 'ready', label: 'Siap Dieksekusi' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'ready', label: 'Ready' },
 ];
 
 export const EXEC_STATUSES: { value: ExecStatus; label: string }[] = [
-  { value: 'not_run', label: 'Belum Dieksekusi' },
-  { value: 'in_progress', label: 'Sedang Dieksekusi' },
-  { value: 'executed', label: 'Sudah Dieksekusi' },
+  { value: 'not_run', label: 'Not Run' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'executed', label: 'Executed' },
 ];
 
 export const TEST_RESULTS: { value: TestResult; label: string; color: string }[] = [
@@ -201,7 +202,35 @@ export const TEST_RESULTS: { value: TestResult; label: string; color: string }[]
 
 export const LIFECYCLE_STATUSES: { value: LifecycleStatus; label: string }[] = [
   { value: 'draft', label: 'Draft' },
-  { value: 'active', label: 'Aktif' },
-  { value: 'obsolete', label: 'Usang' },
-  { value: 'archived', label: 'Diarsipkan' },
+  { value: 'active', label: 'Active' },
+  { value: 'obsolete', label: 'Obsolete' },
+  { value: 'archived', label: 'Archived' },
 ];
+
+export type CommentAuthorRole = 'pm' | 'developer' | 'qa';
+export type CommentStatus = 'pending' | 'reviewed' | 'resolved';
+
+export interface TestCaseComment {
+  id: number;
+  test_case_id: number;
+  author_name: string;
+  author_role: CommentAuthorRole;
+  content: string;
+  status: CommentStatus;
+  reply: string | null;
+  replied_at: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  case_id?: string;
+  test_case_title?: string;
+  module_name?: string;
+  feature_name?: string;
+  priority?: Priority;
+}
+
+export interface FeedbackInboxStats {
+  total: number;
+  pending: number;
+  reviewed: number;
+  resolved: number;
+}

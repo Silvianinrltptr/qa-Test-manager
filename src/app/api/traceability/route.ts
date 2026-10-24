@@ -1,10 +1,15 @@
 import { getDb } from '@/lib/db';
+import { Module, Feature, Requirement, TestCase, Execution } from '@/lib/types';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa', 'dev_pm']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const { searchParams } = new URL(req.url);
     const moduleId = searchParams.get('moduleId');
@@ -13,13 +18,13 @@ export async function GET(req: NextRequest) {
     const modParams = moduleId ? [Number(moduleId)] : [];
 
     // Modules
-    const modules = db.prepare(`SELECT * FROM modules ${modFilter} ORDER BY name`).all(...modParams) as any[];
+    const modules = db.prepare(`SELECT * FROM modules ${modFilter} ORDER BY name`).all(...modParams) as Module[];
 
     // Features
-    const features = db.prepare(`SELECT * FROM features ORDER BY name`).all() as any[];
+    const features = db.prepare(`SELECT * FROM features ORDER BY name`).all() as Feature[];
 
     // Requirements
-    const requirements = db.prepare(`SELECT * FROM requirements WHERE status != 'archived' ORDER BY ref_id`).all() as any[];
+    const requirements = db.prepare(`SELECT * FROM requirements WHERE status != 'archived' ORDER BY ref_id`).all() as (Requirement & { ref_id: string })[];
 
     // Test cases
     const testCases = db.prepare(`
@@ -29,12 +34,12 @@ export async function GET(req: NextRequest) {
       LEFT JOIN features f ON f.id = tc.feature_id
       WHERE tc.lifecycle_status != 'archived'
       ORDER BY tc.case_id
-    `).all() as any[];
+    `).all() as (TestCase & { module_name?: string; feature_name?: string })[];
 
     // Executions (latest execution per test case)
     const executions = db.prepare(`
       SELECT * FROM executions ORDER BY exec_date DESC
-    `).all() as any[];
+    `).all() as Execution[];
 
     // Build hierarchical tree
     const matrix = modules.map(mod => {

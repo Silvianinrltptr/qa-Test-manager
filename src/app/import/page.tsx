@@ -2,26 +2,35 @@
 
 import { useRef, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useToast } from '@/components/ui/Toast';
 import { Upload, Download, Check, X, AlertTriangle, ArrowRight, Save } from 'lucide-react';
 import type { Module } from '@/lib/types';
 import { useEffect } from 'react';
 
-type ImportRow = Record<string, any> & { _status?: 'valid' | 'duplicate' | 'error'; _error?: string; _selected?: boolean; _rowIndex?: number };
+interface ImportSaveResponse {
+  results: { rowIndex: number; status: string; caseId?: string; error?: string }[];
+  succeeded: number;
+  duplicates: number;
+  failed: number;
+  total: number;
+}
+
+type ImportRow = Record<string, unknown> & { _status?: 'valid' | 'duplicate' | 'error'; _error?: string; _selected?: boolean; _rowIndex?: number };
 
 const APP_FIELDS = [
-  { value: 'module_id', label: 'Modul (nama atau ID)', required: true },
-  { value: 'feature_id', label: 'Fitur (nama atau ID)', required: true },
-  { value: 'title', label: 'Judul Test Case', required: true },
-  { value: 'requirement_ref', label: 'Referensi Requirement' },
-  { value: 'test_type', label: 'Tipe Test' },
-  { value: 'preconditions', label: 'Prasyarat' },
-  { value: 'test_steps', label: 'Langkah Test' },
-  { value: 'test_data', label: 'Data Test' },
+  { value: 'module_id', label: 'Module (name or ID)', required: true },
+  { value: 'feature_id', label: 'Feature (name or ID)', required: true },
+  { value: 'title', label: 'Test Case Title', required: true },
+  { value: 'requirement_ref', label: 'Requirement Reference' },
+  { value: 'test_type', label: 'Test Type' },
+  { value: 'preconditions', label: 'Preconditions' },
+  { value: 'test_steps', label: 'Test Steps' },
+  { value: 'test_data', label: 'Test Data' },
   { value: 'expected_result', label: 'Expected Result' },
-  { value: 'priority', label: 'Prioritas' },
-  { value: 'prep_status', label: 'Status Persiapan' },
-  { value: 'notes', label: 'Catatan' },
+  { value: 'priority', label: 'Priority' },
+  { value: 'prep_status', label: 'Preparation Status' },
+  { value: 'notes', label: 'Notes' },
 ];
 
 export default function ImportPage() {
@@ -32,7 +41,7 @@ export default function ImportPage() {
   const [fieldMap, setFieldMap] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<ImportRow[]>([]);
   const [saving, setSaving] = useState(false);
-  const [results, setResults] = useState<any>(null);
+  const [results, setResults] = useState<ImportSaveResponse | null>(null);
   const [modules, setModules] = useState<Module[]>([]);
 
   useEffect(() => {
@@ -43,7 +52,7 @@ export default function ImportPage() {
     const ext = file.name.split('.').pop()?.toLowerCase();
     
     if (!['xlsx', 'xls', 'csv'].includes(ext || '')) {
-      toast.error('Hanya file XLSX, XLS, dan CSV yang didukung di sini. Untuk file lain, gunakan AI Generator.');
+      toast.error('Only XLSX, XLS, and CSV files are supported here. For other files, use the AI Generator.');
       return;
     }
 
@@ -70,9 +79,9 @@ export default function ImportPage() {
         autoMap(headers);
       }
       setStep(2);
-      toast.success(`File "${file.name}" berhasil diproses`);
+      toast.success(`File "${file.name}" processed successfully`);
     } catch (err) {
-      toast.error('Gagal memproses file');
+      toast.error('Failed to process file');
     }
   };
 
@@ -109,9 +118,9 @@ export default function ImportPage() {
       const featureId = fieldMap.feature_id ? row[fieldMap.feature_id] : '';
       let status: 'valid' | 'error' = 'valid';
       let error = '';
-      if (!title) { status = 'error'; error = 'Judul kosong'; }
-      else if (!moduleId) { status = 'error'; error = 'Modul tidak ditemukan'; }
-      else if (!featureId) { status = 'error'; error = 'Fitur tidak ditemukan'; }
+      if (!title) { status = 'error'; error = 'Title is empty'; }
+      else if (!moduleId) { status = 'error'; error = 'Module not found'; }
+      else if (!featureId) { status = 'error'; error = 'Feature not found'; }
       return { ...row, _status: status, _error: error, _selected: status === 'valid', _rowIndex: i };
     });
     setPreview(rows);
@@ -120,7 +129,7 @@ export default function ImportPage() {
 
   const saveImport = async () => {
     const selected = preview.filter(r => r._selected && r._status === 'valid');
-    if (selected.length === 0) { toast.error('Tidak ada baris yang dipilih'); return; }
+    if (selected.length === 0) { toast.error('No rows selected'); return; }
     
     setSaving(true);
     try {
@@ -137,7 +146,7 @@ export default function ImportPage() {
         setResults(data);
         setStep(4);
       } else {
-        toast.error('Gagal menyimpan');
+        toast.error('Failed to save');
       }
     } finally { setSaving(false); }
   };
@@ -156,25 +165,26 @@ export default function ImportPage() {
 
   return (
     <AppShell>
-      <div className="page-header">
+      <header className="page-header main-header">
         <div>
           <h1 className="page-title">Import Excel / CSV</h1>
-          <p className="page-subtitle">Import test case dari file Excel atau CSV dengan validasi dan preview</p>
+          <p className="page-subtitle">Import test cases from Excel or CSV files with validation and preview</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <a href="/api/export?type=template" className="btn btn-secondary" download>
             <Download size={14} /> Download Template
           </a>
+          <ThemeToggle />
         </div>
-      </div>
+      </header>
 
       {/* Stepper */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 24 }}>
         {[
           { n: 1, label: 'Upload File' },
-          { n: 2, label: 'Pemetaan Kolom' },
-          { n: 3, label: 'Preview & Validasi' },
-          { n: 4, label: 'Selesai' },
+          { n: 2, label: 'Column Mapping' },
+          { n: 3, label: 'Preview & Validation' },
+          { n: 4, label: 'Complete' },
         ].map((s, i, arr) => (
           <div key={s.n} style={{ display: 'flex', alignItems: 'center', flex: i < arr.length - 1 ? 1 : undefined }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -207,8 +217,8 @@ export default function ImportPage() {
             onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
           >
             <Upload size={32} />
-            <div style={{ fontWeight: 600, fontSize: 16 }}>Pilih atau seret file ke sini</div>
-            <div style={{ fontSize: 13 }}>Format yang didukung: XLSX, XLS, CSV</div>
+            <div style={{ fontWeight: 600, fontSize: 16 }}>Select or drag file here</div>
+            <div style={{ fontSize: 13 }}>Supported formats: XLSX, XLS, CSV</div>
           </div>
           <input ref={fileRef} type="file" style={{ display: 'none' }} accept=".xlsx,.xls,.csv"
             onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} id="import-file-input" />
@@ -226,7 +236,7 @@ export default function ImportPage() {
       {/* Step 2: Field Mapping */}
       {step === 2 && fileData && (
         <div className="card" style={{ maxWidth: 700 }}>
-          <div style={{ fontWeight: 600, marginBottom: 16 }}>Petakan kolom file ke field aplikasi</div>
+          <div style={{ fontWeight: 600, marginBottom: 16 }}>Map file columns to application fields</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
             {APP_FIELDS.map(f => (
               <div key={f.value} style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', alignItems: 'center', gap: 10 }}>
@@ -236,14 +246,14 @@ export default function ImportPage() {
                 <ArrowRight size={14} style={{ color: 'var(--foreground-dim)', justifySelf: 'center' }} />
                 <select className="form-control" value={fieldMap[f.value] || ''}
                   onChange={e => setFieldMap(prev => ({ ...prev, [f.value]: e.target.value }))}>
-                  <option value="">-- Tidak dipetakan --</option>
+                  <option value="">-- Not mapped --</option>
                   {fileData.headers.map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
               </div>
             ))}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-secondary" onClick={() => setStep(1)}>‹ Kembali</button>
+            <button className="btn btn-secondary" onClick={() => setStep(1)}>‹ Back</button>
             <button className="btn btn-primary" onClick={generatePreview}
               disabled={!fieldMap.title || !fieldMap.module_id || !fieldMap.feature_id} id="btn-preview-import">
               Preview Data ›
@@ -262,14 +272,14 @@ export default function ImportPage() {
                 {' · '}
                 <span style={{ color: 'var(--error)' }}>{preview.filter(r => r._status === 'error').length} error</span>
                 {' · '}
-                <span style={{ fontWeight: 600 }}>{selectedCount} dipilih</span>
+                <span style={{ fontWeight: 600 }}>{selectedCount} selected</span>
               </span>
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setStep(2)}>‹ Kembali</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setStep(2)}>‹ Back</button>
               <button className="btn btn-primary" onClick={saveImport} disabled={saving || selectedCount === 0} id="btn-save-import">
                 {saving ? <span className="spinner" /> : <Save size={13} />}
-                Simpan {selectedCount} Baris
+                Save {selectedCount} Row{selectedCount === 1 ? '' : 's'}
               </button>
             </div>
           </div>
@@ -284,11 +294,11 @@ export default function ImportPage() {
                     />
                   </th>
                   <th>Status</th>
-                  <th>{fieldMap.title || 'Judul'}</th>
-                  <th>{fieldMap.module_id || 'Modul'}</th>
-                  <th>{fieldMap.feature_id || 'Fitur'}</th>
+                  <th>{fieldMap.title || 'Title'}</th>
+                  <th>{fieldMap.module_id || 'Module'}</th>
+                  <th>{fieldMap.feature_id || 'Feature'}</th>
                   <th>{fieldMap.expected_result || 'Expected'}</th>
-                  <th>{fieldMap.priority || 'Prioritas'}</th>
+                  <th>{fieldMap.priority || 'Priority'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -306,14 +316,14 @@ export default function ImportPage() {
                       )}
                     </td>
                     <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {fieldMap.title ? row[fieldMap.title] : ''}
+                      {fieldMap.title ? String(row[fieldMap.title] ?? '') : ''}
                     </td>
-                    <td>{fieldMap.module_id ? row[fieldMap.module_id] : ''}</td>
-                    <td>{fieldMap.feature_id ? row[fieldMap.feature_id] : ''}</td>
+                    <td>{fieldMap.module_id ? String(row[fieldMap.module_id] ?? '') : ''}</td>
+                    <td>{fieldMap.feature_id ? String(row[fieldMap.feature_id] ?? '') : ''}</td>
                     <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {fieldMap.expected_result ? row[fieldMap.expected_result] : ''}
+                      {fieldMap.expected_result ? String(row[fieldMap.expected_result] ?? '') : ''}
                     </td>
-                    <td>{fieldMap.priority ? row[fieldMap.priority] : ''}</td>
+                    <td>{fieldMap.priority ? String(row[fieldMap.priority] ?? '') : ''}</td>
                   </tr>
                 ))}
               </tbody>
@@ -327,25 +337,25 @@ export default function ImportPage() {
         <div className="card" style={{ maxWidth: 600 }}>
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: 48 }}>🎉</div>
-            <div style={{ fontSize: 20, fontWeight: 700, marginTop: 12 }}>Import Selesai!</div>
+            <div style={{ fontSize: 20, fontWeight: 700, marginTop: 12 }}>Import Complete!</div>
           </div>
           <div className="grid-3" style={{ marginBottom: 20 }}>
             <div style={{ textAlign: 'center', padding: '16px', background: 'rgba(52,211,153,0.08)', borderRadius: 8 }}>
               <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--success)' }}>{results.succeeded}</div>
-              <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Berhasil</div>
+              <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Succeeded</div>
             </div>
             <div style={{ textAlign: 'center', padding: '16px', background: 'rgba(251,191,36,0.08)', borderRadius: 8 }}>
               <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--warning)' }}>{results.duplicates}</div>
-              <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Duplikat</div>
+              <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Duplicates</div>
             </div>
             <div style={{ textAlign: 'center', padding: '16px', background: 'rgba(248,113,113,0.08)', borderRadius: 8 }}>
               <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--error)' }}>{results.failed}</div>
-              <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Gagal</div>
+              <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Failed</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-            <button className="btn btn-secondary" onClick={reset}>Import Lagi</button>
-            <a href="/test-cases" className="btn btn-primary">Lihat Test Cases ›</a>
+            <button className="btn btn-secondary" onClick={reset}>Import Again</button>
+            <a href="/test-cases" className="btn btn-primary">View Test Cases ›</a>
           </div>
         </div>
       )}

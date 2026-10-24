@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 // Parse uploaded files and extract text content
 export async function POST(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
 
@@ -26,18 +30,18 @@ export async function POST(req: NextRequest) {
         extractedText = result.value;
         method = 'docx';
       } catch {
-        return NextResponse.json({ error: 'Gagal memproses file DOCX. Pastikan mammoth terinstall.' }, { status: 422 });
+        return NextResponse.json({ error: 'Failed to process DOCX file. Ensure mammoth is installed.' }, { status: 422 });
       }
     } else if (ext === 'pdf') {
       try {
-        // @ts-ignore
         const pdfParseModule = await import('pdf-parse');
-        const pdfParse = (pdfParseModule as any).default || pdfParseModule;
+        type PdfParseFn = (buf: Buffer) => Promise<{ text: string }>;
+        const pdfParse: PdfParseFn = (pdfParseModule as { default?: PdfParseFn }).default || (pdfParseModule as unknown as PdfParseFn);
         const data = await pdfParse(buffer);
         extractedText = data.text;
         method = 'pdf';
       } catch {
-        return NextResponse.json({ error: 'Gagal memproses file PDF.' }, { status: 422 });
+        return NextResponse.json({ error: 'Failed to process PDF file.' }, { status: 422 });
       }
     } else if (ext === 'xlsx' || ext === 'xls') {
       try {
@@ -49,7 +53,7 @@ export async function POST(req: NextRequest) {
         extractedText = XLSX.utils.sheet_to_csv(sheet);
         method = 'xlsx';
       } catch {
-        return NextResponse.json({ error: 'Gagal memproses file Excel.' }, { status: 422 });
+        return NextResponse.json({ error: 'Failed to process Excel file.' }, { status: 422 });
       }
     } else if (['png', 'jpg', 'jpeg', 'webp'].includes(ext || '')) {
       // Use Gemini Vision API for image OCR
@@ -57,7 +61,7 @@ export async function POST(req: NextRequest) {
       if (!apiKey) {
         return NextResponse.json({
           error: 'AI_NOT_CONFIGURED',
-          message: 'GEMINI_API_KEY diperlukan untuk memproses gambar'
+          message: 'GEMINI_API_KEY is required to process images'
         }, { status: 503 });
       }
 
@@ -70,7 +74,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           contents: [{
             parts: [
-              { text: 'Ekstrak semua teks dari gambar ini. Pertahankan format aslinya sebisa mungkin. Jika ini adalah requirement document, tabel, atau screenshot, ekstrak semua konten teksnya.' },
+              { text: 'Extract all text from this image. Preserve the original formatting as much as possible. If this is a requirement document, table, or screenshot, extract all text content.' },
               { inlineData: { mimeType, data: base64 } }
             ]
           }]
@@ -78,7 +82,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (!response.ok) {
-        return NextResponse.json({ error: 'Gagal memproses gambar dengan AI' }, { status: 502 });
+        return NextResponse.json({ error: 'Failed to process image with AI' }, { status: 502 });
       }
 
       const aiResp = await response.json();
@@ -86,12 +90,12 @@ export async function POST(req: NextRequest) {
       method = 'ocr_vision';
     } else {
       return NextResponse.json({
-        error: `Format file .${ext} tidak didukung. Format yang didukung: TXT, DOCX, PDF, XLSX, XLS, CSV, PNG, JPG, JPEG`
+        error: `File format .${ext} is not supported. Supported formats: TXT, DOCX, PDF, XLSX, XLS, CSV, PNG, JPG, JPEG`
       }, { status: 415 });
     }
 
     if (!extractedText.trim()) {
-      return NextResponse.json({ error: 'Tidak dapat mengekstrak teks dari file ini' }, { status: 422 });
+      return NextResponse.json({ error: 'Unable to extract text from this file' }, { status: 422 });
     }
 
     return NextResponse.json({

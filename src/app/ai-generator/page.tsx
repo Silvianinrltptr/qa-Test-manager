@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { EmptyState, LoadingSpinner } from '@/components/ui/Shared';
 import { useToast } from '@/components/ui/Toast';
 import { Sparkles, Upload, FileText, AlertTriangle, Check, X, Info, Save, Trash2 } from 'lucide-react';
@@ -54,17 +55,17 @@ export default function AIGeneratorPage() {
       if (res.ok) {
         setExtractedText(data.text);
         setRequirementText(data.text);
-        toast.success(`File "${file.name}" berhasil diproses (${data.method})`);
+        toast.success(`File "${file.name}" processed successfully (${data.method})`);
         setTab('paste');
       } else {
-        toast.error(data.error || 'Gagal memproses file');
+        toast.error(data.error || 'Failed to process file');
       }
     } finally { setUploading(false); }
   };
 
   const generate = async () => {
-    if (!moduleId || !featureId) { toast.error('Pilih modul dan fitur terlebih dahulu'); return; }
-    if (!requirementText.trim()) { toast.error('Masukkan teks requirement terlebih dahulu'); return; }
+    if (!moduleId || !featureId) { toast.error('Please select a module and feature first'); return; }
+    if (!requirementText.trim()) { toast.error('Please enter requirement text first'); return; }
 
     setGenerating(true);
     setDrafts([]);
@@ -77,18 +78,18 @@ export default function AIGeneratorPage() {
       const data = await res.json();
       if (res.ok) {
         setDrafts(data.drafts.map((d: AIDraft) => ({ ...d, selected: d.selected !== false })));
-        toast.success(`${data.totalGenerated} draft test case berhasil digenerate`);
+        toast.success(`${data.totalGenerated} draft test case${data.totalGenerated === 1 ? '' : 's'} generated successfully`);
       } else if (data.error === 'AI_NOT_CONFIGURED') {
-        toast.error('AI belum dikonfigurasi. Cek halaman Pengaturan.');
+        toast.error('AI is not configured. Check the Settings page.');
       } else {
-        toast.error(data.error || 'Gagal generate test case');
+        toast.error(data.error || 'Failed to generate test cases');
       }
     } finally { setGenerating(false); }
   };
 
   const saveSelected = async () => {
     const selected = drafts.filter(d => d.selected);
-    if (selected.length === 0) { toast.error('Pilih minimal satu draft untuk disimpan'); return; }
+    if (selected.length === 0) { toast.error('Select at least one draft to save'); return; }
 
     setSaving(true);
     try {
@@ -108,12 +109,12 @@ export default function AIGeneratorPage() {
 
       if (res.ok) {
         const data = await res.json();
-        toast.success(`${data.succeeded} test case berhasil disimpan`);
-        if (data.failed > 0) toast.warning(`${data.failed} test case gagal disimpan`);
+        toast.success(`${data.succeeded} test case${data.succeeded === 1 ? '' : 's'} saved successfully`);
+        if (data.failed > 0) toast.warning(`${data.failed} test case${data.failed === 1 ? '' : 's'} failed to save`);
         setDrafts([]);
         setRequirementText('');
       } else {
-        toast.error('Gagal menyimpan');
+        toast.error('Failed to save');
       }
     } finally { setSaving(false); }
   };
@@ -130,23 +131,26 @@ export default function AIGeneratorPage() {
 
   return (
     <AppShell>
-      <div className="page-header">
+      <header className="page-header main-header">
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Sparkles size={22} style={{ color: 'var(--accent)' }} />
             AI Test Case Generator
           </h1>
-          <p className="page-subtitle">Generate draft test case dari requirement menggunakan AI</p>
+          <p className="page-subtitle">Generate test case drafts from requirements using AI</p>
         </div>
-      </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <ThemeToggle />
+        </div>
+      </header>
 
       {isConfigured === false && (
         <div className="warn-box" style={{ marginBottom: 20 }}>
           <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
           <div>
-            <strong>AI belum dikonfigurasi.</strong> Untuk menggunakan fitur ini, tambahkan <code>GEMINI_API_KEY</code> ke file <code>.env.local</code> Anda.
-            Dapatkan API key gratis di <a href="https://aistudio.google.com" target="_blank" style={{ color: 'inherit' }}>aistudio.google.com</a>.
-            <br />Manajemen test case manual tetap berfungsi tanpa AI.
+            <strong>AI is not configured.</strong> To use this feature, add <code>GEMINI_API_KEY</code> to your <code>.env.local</code> file.
+            Get a free API key at <a href="https://aistudio.google.com" target="_blank" style={{ color: 'inherit' }}>aistudio.google.com</a>.
+            <br />Manual test case management continues to function without AI.
           </div>
         </div>
       )}
@@ -162,16 +166,16 @@ export default function AIGeneratorPage() {
           {/* Module/Feature Select */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
             <div className="form-group">
-              <label className="form-label">Modul <span className="form-required">*</span></label>
+              <label className="form-label">Module <span className="form-required">*</span></label>
               <select className="form-control" value={moduleId} onChange={e => { setModuleId(e.target.value); setFeatureId(''); }} id="ai-select-module">
-                <option value="">-- Pilih Modul --</option>
+                <option value="">-- Select Module --</option>
                 {modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Fitur <span className="form-required">*</span></label>
+              <label className="form-label">Feature <span className="form-required">*</span></label>
               <select className="form-control" value={featureId} onChange={e => setFeatureId(e.target.value)} disabled={!moduleId} id="ai-select-feature">
-                <option value="">-- Pilih Fitur --</option>
+                <option value="">-- Select Feature --</option>
                 {filteredFeatures.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </div>
@@ -180,7 +184,7 @@ export default function AIGeneratorPage() {
           {/* Input Tabs */}
           <div className="tabs">
             <button className={`tab ${tab === 'paste' ? 'active' : ''}`} onClick={() => setTab('paste')}>
-              Tempel Teks
+              Paste Text
             </button>
             <button className={`tab ${tab === 'file' ? 'active' : ''}`} onClick={() => setTab('file')}>
               Upload File
@@ -192,13 +196,13 @@ export default function AIGeneratorPage() {
               <textarea
                 className="form-control"
                 rows={12}
-                placeholder="Tempel teks requirement di sini...&#10;&#10;Contoh:&#10;- User harus bisa login dengan email dan password&#10;- Email harus dalam format yang valid&#10;- Password minimum 8 karakter"
+                placeholder="Paste requirement text here...&#10;&#10;Example:&#10;- User must be able to log in with email and password&#10;- Email must be in a valid format&#10;- Password must be at least 8 characters"
                 value={requirementText}
                 onChange={e => setRequirementText(e.target.value)}
                 id="ai-requirement-text"
               />
               <div style={{ fontSize: 11, color: 'var(--foreground-muted)', textAlign: 'right' }}>
-                {requirementText.length} karakter
+                {requirementText.length} characters
               </div>
             </div>
           )}
@@ -214,12 +218,12 @@ export default function AIGeneratorPage() {
                 {uploading ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                     <div className="spinner" />
-                    <div>Memproses file...</div>
+                    <div>Processing file...</div>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                     <Upload size={24} />
-                    <div style={{ fontWeight: 500 }}>Klik atau seret file ke sini</div>
+                    <div style={{ fontWeight: 500 }}>Click or drag file here</div>
                     <div style={{ fontSize: 12 }}>TXT, DOCX, PDF, XLSX, CSV, PNG, JPG</div>
                   </div>
                 )}
@@ -234,7 +238,7 @@ export default function AIGeneratorPage() {
               />
               {extractedText && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 12, color: 'var(--success)', marginBottom: 6 }}>✅ Teks berhasil diekstrak:</div>
+                  <div style={{ fontSize: 12, color: 'var(--success)', marginBottom: 6 }}>✅ Text extracted successfully:</div>
                   <pre style={{ fontSize: 11, background: 'var(--surface-2)', padding: 12, borderRadius: 8, maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap', color: 'var(--foreground-muted)' }}>
                     {extractedText.slice(0, 500)}{extractedText.length > 500 ? '...' : ''}
                   </pre>
@@ -264,7 +268,7 @@ export default function AIGeneratorPage() {
             <div className="card">
               <LoadingSpinner />
               <div style={{ textAlign: 'center', color: 'var(--foreground-muted)', fontSize: 13, marginTop: 8 }}>
-                AI sedang menganalisis requirement dan membuat draft test case...
+                AI is analyzing requirements and creating test case drafts...
               </div>
             </div>
           )}
@@ -272,8 +276,8 @@ export default function AIGeneratorPage() {
           {!generating && drafts.length === 0 && (
             <EmptyState
               icon={<Sparkles size={28} />}
-              title="Belum ada draft"
-              description="Pilih modul & fitur, masukkan requirement, lalu klik Generate"
+              title="No drafts yet"
+              description="Select module & feature, enter requirements, then click Generate"
             />
           )}
 
@@ -281,19 +285,19 @@ export default function AIGeneratorPage() {
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <div>
-                  <span style={{ fontWeight: 600 }}>{drafts.length} draft</span>
-                  <span style={{ color: 'var(--foreground-muted)', fontSize: 13 }}> · {selectedCount} dipilih</span>
+                  <span style={{ fontWeight: 600 }}>{drafts.length} draft{drafts.length === 1 ? '' : 's'}</span>
+                  <span style={{ color: 'var(--foreground-muted)', fontSize: 13 }}> · {selectedCount} selected</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button className="btn btn-sm btn-secondary" onClick={() => setDrafts(d => d.map(x => ({ ...x, selected: true })))}>
-                    Pilih Semua
+                    Select All
                   </button>
                   <button className="btn btn-sm btn-secondary" onClick={() => setDrafts(d => d.map(x => ({ ...x, selected: false })))}>
-                    Kosongkan
+                    Deselect All
                   </button>
                   <button className="btn btn-primary" onClick={saveSelected} disabled={saving || selectedCount === 0} id="btn-save-drafts">
                     {saving ? <span className="spinner" /> : <Save size={13} />}
-                    Simpan Terpilih ({selectedCount})
+                    Save Selected ({selectedCount})
                   </button>
                 </div>
               </div>
@@ -328,7 +332,7 @@ export default function AIGeneratorPage() {
                             {TEST_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                           </select>
                           {draft.isDuplicate && (
-                            <span className="badge badge-fail" style={{ fontSize: 10 }}>⚠️ Potensi Duplikat</span>
+                            <span className="badge badge-fail" style={{ fontSize: 10 }}>⚠️ Potential Duplicate</span>
                           )}
                         </div>
                       </div>
@@ -337,11 +341,11 @@ export default function AIGeneratorPage() {
                       </button>
                     </div>
                     <div style={{ display: 'grid', gap: 8, paddingLeft: 28 }}>
-                      <DraftField label="Prasyarat" value={draft.preconditions} onChange={v => updateDraft(idx, 'preconditions', v)} />
-                      <DraftField label="Langkah Test" value={draft.test_steps} onChange={v => updateDraft(idx, 'test_steps', v)} rows={3} />
-                      <DraftField label="Data Test" value={draft.test_data} onChange={v => updateDraft(idx, 'test_data', v)} />
+                      <DraftField label="Preconditions" value={draft.preconditions} onChange={v => updateDraft(idx, 'preconditions', v)} />
+                      <DraftField label="Test Steps" value={draft.test_steps} onChange={v => updateDraft(idx, 'test_steps', v)} rows={3} />
+                      <DraftField label="Test Data" value={draft.test_data} onChange={v => updateDraft(idx, 'test_data', v)} />
                       <DraftField label="Expected Result" value={draft.expected_result} onChange={v => updateDraft(idx, 'expected_result', v)} />
-                      {draft.notes && <DraftField label="Catatan AI" value={draft.notes} onChange={v => updateDraft(idx, 'notes', v)} />}
+                      {draft.notes && <DraftField label="AI Notes" value={draft.notes} onChange={v => updateDraft(idx, 'notes', v)} />}
                     </div>
                   </div>
                 ))}
@@ -350,7 +354,7 @@ export default function AIGeneratorPage() {
               <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
                 <button className="btn btn-primary" onClick={saveSelected} disabled={saving || selectedCount === 0}>
                   {saving ? <span className="spinner" /> : <Save size={14} />}
-                  Simpan {selectedCount} Test Case Terpilih
+                  Save {selectedCount} Selected Test Case{selectedCount === 1 ? '' : 's'}
                 </button>
               </div>
             </>

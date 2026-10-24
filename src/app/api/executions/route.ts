@@ -1,10 +1,14 @@
 import { getDb, logActivity, logChange } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa', 'dev_pm']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const { searchParams } = new URL(req.url);
     const testCaseId = searchParams.get('testCaseId');
@@ -35,6 +39,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const body = await req.json();
     const { test_case_id, exec_date, environment, actual_result, result, evidence, defect_ref, notes, is_retest } = body;
@@ -66,7 +73,7 @@ export async function POST(req: NextRequest) {
     `).run(result, actual_result || null, defect_ref || null, Number(test_case_id));
 
     const execId = execResult.lastInsertRowid as number;
-    logActivity(db, 'executed', 'test_case', Number(test_case_id), tc.case_id, `Eksekusi: ${tc.case_id} → ${result.toUpperCase()}`);
+    logActivity(db, 'executed', 'test_case', Number(test_case_id), tc.case_id, `Execution: ${tc.case_id} → ${result.toUpperCase()}`);
     logChange(db, {
       entityType: 'test_case', entityId: Number(test_case_id), entityRef: tc.case_id,
       changeType: 'executed', newValues: { result, exec_date, environment }

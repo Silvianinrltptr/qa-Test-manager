@@ -7,22 +7,22 @@ const RESULT_LABELS: Record<string, string> = {
 };
 
 const PRIORITY_LABELS: Record<string, string> = {
-  critical: 'Kritis', high: 'Tinggi', medium: 'Sedang', low: 'Rendah'
+  critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low'
 };
 
 const PREP_LABELS: Record<string, string> = {
-  draft: 'Draft', in_progress: 'Sedang Disiapkan', ready: 'Siap'
+  draft: 'Draft', in_progress: 'In Progress', ready: 'Ready'
 };
 
 const LIFECYCLE_LABELS: Record<string, string> = {
-  draft: 'Draft', active: 'Aktif', obsolete: 'Usang', archived: 'Diarsipkan'
+  draft: 'Draft', active: 'Active', obsolete: 'Obsolete', archived: 'Archived'
 };
 
 const TYPE_LABELS: Record<string, string> = {
-  functional: 'Fungsional', regression: 'Regresi', smoke: 'Smoke',
-  boundary: 'Boundary', negative: 'Negatif', validation: 'Validasi',
-  permission: 'Perizinan', integration: 'Integrasi', uat: 'UAT',
-  performance: 'Performa', other: 'Lainnya'
+  functional: 'Functional', regression: 'Regression', smoke: 'Smoke',
+  boundary: 'Boundary', negative: 'Negative', validation: 'Validation',
+  permission: 'Permission', integration: 'Integration', uat: 'UAT',
+  performance: 'Performance', other: 'Other'
 };
 
 export function ResultBadge({ result }: { result: TestResult }) {

@@ -1,10 +1,14 @@
 import { getDb, logActivity, logChange } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa', 'dev_pm']);
+    if (errorResponse) return errorResponse;
+
     const { id } = await params;
     const db = getDb();
 
@@ -20,7 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     `).get(Number(id));
 
     if (!requirement) {
-      return NextResponse.json({ error: 'Requirement tidak ditemukan' }, { status: 404 });
+      return NextResponse.json({ error: 'Requirement not found' }, { status: 404 });
     }
 
     const reqData = requirement as { id: number; ref_id: string; module_id: number; feature_id: number };
@@ -55,6 +59,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const { id } = await params;
     const db = getDb();
     const body = await req.json();
@@ -72,7 +79,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     } | undefined;
 
     if (!existing) {
-      return NextResponse.json({ error: 'Requirement tidak ditemukan' }, { status: 404 });
+      return NextResponse.json({ error: 'Requirement not found' }, { status: 404 });
     }
 
     const newVersion = (existing.version || 1) + 1;
@@ -112,7 +119,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       'requirement',
       Number(id),
       existing.ref_id,
-      `Mengubah requirement ${existing.ref_id} (v${newVersion}, tipe: ${change_type}): ${title || existing.title}`
+      `Updated requirement ${existing.ref_id} (v${newVersion}, type: ${change_type}): ${title || existing.title}`
     );
 
     logChange(db, {
@@ -122,7 +129,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       changeType: change_type,
       oldValues: { title: existing.title, description: existing.description, status: existing.status, version: existing.version },
       newValues: { title, description, status, version: newVersion },
-      reason: reason || `Requirement diubah ke versi ${newVersion}`,
+      reason: reason || `Requirement updated to version ${newVersion}`,
       requirementRef: existing.ref_id,
     });
 
@@ -135,6 +142,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const { id } = await params;
     const db = getDb();
 
@@ -145,19 +155,19 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     } | undefined;
 
     if (!existing) {
-      return NextResponse.json({ error: 'Requirement tidak ditemukan' }, { status: 404 });
+      return NextResponse.json({ error: 'Requirement not found' }, { status: 404 });
     }
 
     // Soft delete / archive to preserve traceability
     db.prepare(`UPDATE requirements SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(Number(id));
 
-    logActivity(db, 'archive_requirement', 'requirement', Number(id), existing.ref_id, `Mengarsipkan requirement ${existing.ref_id}: ${existing.title}`);
+    logActivity(db, 'archive_requirement', 'requirement', Number(id), existing.ref_id, `Archived requirement ${existing.ref_id}: ${existing.title}`);
     logChange(db, {
       entityType: 'requirement',
       entityId: Number(id),
       entityRef: existing.ref_id,
       changeType: 'archived',
-      reason: 'Requirement diarsipkan',
+      reason: 'Requirement archived',
       requirementRef: existing.ref_id,
     });
 

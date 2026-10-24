@@ -2,11 +2,15 @@ import { getDb, logActivity } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -53,6 +57,9 @@ export async function GET() {
 // Seed sample data for testing if DB is empty
 export async function POST(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const body = await req.json();
     const { action } = body;
@@ -60,25 +67,25 @@ export async function POST(req: NextRequest) {
     if (action === 'seed_sample_data') {
       const tcCount = (db.prepare('SELECT COUNT(*) as c FROM test_cases').get() as { c: number }).c;
       if (tcCount > 0) {
-        return NextResponse.json({ message: 'Database sudah memiliki data. Tidak perlu seed ulang.' }, { status: 400 });
+        return NextResponse.json({ message: 'Database already has data. Reseeding is not required.' }, { status: 400 });
       }
 
       // Create Modules
       const m1 = db.prepare(`INSERT INTO modules (name, description, prefix, status) VALUES (?, ?, ?, 'active')`)
-        .run('Autentikasi & Akun', 'Modul autentikasi, registrasi, lupa password dan profil user', 'AUTH');
+        .run('Authentication & Account', 'Authentication module, registration, forgot password, and user profile', 'AUTH');
       const m2 = db.prepare(`INSERT INTO modules (name, description, prefix, status) VALUES (?, ?, ?, 'active')`)
-        .run('Manajemen Transaksi', 'Modul checkout, pembayaran, invoice, dan riwayat pesanan', 'TRX');
+        .run('Transaction Management', 'Checkout module, payment, invoices, and order history', 'TRX');
 
       const m1Id = Number(m1.lastInsertRowid);
       const m2Id = Number(m2.lastInsertRowid);
 
       // Create Features
       const f1 = db.prepare(`INSERT INTO features (module_id, name, description) VALUES (?, ?, ?)`)
-        .run(m1Id, 'Login & Registrasi', 'Fitur masuk dan pendaftaran akun pengguna baru');
+        .run(m1Id, 'Login & Registration', 'User login and new account registration feature');
       const f2 = db.prepare(`INSERT INTO features (module_id, name, description) VALUES (?, ?, ?)`)
-        .run(m1Id, 'Reset Password', 'Fitur pemulihan kata sandi via email OTP');
+        .run(m1Id, 'Reset Password', 'Password recovery feature via email OTP');
       const f3 = db.prepare(`INSERT INTO features (module_id, name, description) VALUES (?, ?, ?)`)
-        .run(m2Id, 'Payment Gateway', 'Integrasi VA, QRIS, dan Kartu Kredit');
+        .run(m2Id, 'Payment Gateway', 'VA, QRIS, and Credit Card integration');
 
       const f1Id = Number(f1.lastInsertRowid);
       const f2Id = Number(f2.lastInsertRowid);
@@ -87,99 +94,99 @@ export async function POST(req: NextRequest) {
       // Create Requirements
       const r1 = db.prepare(`
         INSERT INTO requirements (module_id, feature_id, ref_id, title, description, change_type, status, version)
-        VALUES (?, ?, 'REQ-AUTH-001', 'Login Pengguna dengan Email & Password', 'Sistem harus memvalidasi format email, mengecek password terenkripsi, membatasi max 5 attempt salah sebelum lockout 15 menit, dan menerbitkan JWT token.', 'new', 'active', 1)
+        VALUES (?, ?, 'REQ-AUTH-001', 'User Login with Email & Password', 'The system must validate email format, verify encrypted password, limit to max 5 failed attempts before a 15-minute lockout, and issue a JWT token.', 'new', 'active', 1)
       `).run(m1Id, f1Id);
 
       const r2 = db.prepare(`
         INSERT INTO requirements (module_id, feature_id, ref_id, title, description, change_type, status, version)
-        VALUES (?, ?, 'REQ-AUTH-002', 'Lupa Password via OTP Email', 'Sistem mengirimkan kode OTP 6 digit berlaku 5 menit ke email terdaftar. Setelah verifikasi OTP berhasil, pengguna dapat memasukkan password baru.', 'updated', 'active', 2)
+        VALUES (?, ?, 'REQ-AUTH-002', 'Forgot Password via Email OTP', 'The system sends a 6-digit OTP code valid for 5 minutes to the registered email. After successful OTP verification, the user can set a new password.', 'updated', 'active', 2)
       `).run(m1Id, f2Id);
 
       const r3 = db.prepare(`
         INSERT INTO requirements (module_id, feature_id, ref_id, title, description, change_type, status, version)
-        VALUES (?, ?, 'REQ-TRX-001', 'Pembayaran QRIS Statis & Dinamis', 'Sistem menghasilkan QRIS yang kedaluwarsa dalam 15 menit dan menerima callback webhook penyelesaian pembayaran.', 'new', 'active', 1)
+        VALUES (?, ?, 'REQ-TRX-001', 'Static & Dynamic QRIS Payment', 'The system generates a QRIS code that expires in 15 minutes and handles payment completion webhook callbacks.', 'new', 'active', 1)
       `).run(m2Id, f3Id);
 
       // Create initial history for requirements
       db.prepare(`INSERT INTO requirement_history (requirement_id, title, description, change_type, version) VALUES (?, ?, ?, 'new', 1)`)
-        .run(Number(r1.lastInsertRowid), 'Login Pengguna', 'Requirement awal');
+        .run(Number(r1.lastInsertRowid), 'User Login', 'Initial requirement');
       db.prepare(`INSERT INTO requirement_history (requirement_id, title, description, change_type, version) VALUES (?, ?, ?, 'updated', 2)`)
-        .run(Number(r2.lastInsertRowid), 'Lupa Password via OTP Email', 'Update durasi OTP dari 10 menit ke 5 menit');
+        .run(Number(r2.lastInsertRowid), 'Forgot Password via Email OTP', 'Updated OTP duration from 10 minutes to 5 minutes');
 
       // Create Test Cases
       const sampleCases = [
         {
           case_id: 'AUTH-001', module_id: m1Id, feature_id: f1Id, requirement_ref: 'REQ-AUTH-001',
-          title: 'Login berhasil dengan email dan password valid', test_type: 'functional',
-          preconditions: 'Akun user sudah aktif dan terverifikasi',
-          test_steps: '1. Buka halaman login\n2. Masukkan email valid (user@example.com)\n3. Masukkan password valid\n4. Klik tombol Masuk',
+          title: 'Successful login with valid email and password', test_type: 'functional',
+          preconditions: 'User account is active and verified',
+          test_steps: '1. Open login page\n2. Enter valid email (user@example.com)\n3. Enter valid password\n4. Click Login button',
           test_data: 'Email: user@example.com, Pass: ValidPass123!',
-          expected_result: 'User berhasil login dan diarahkan ke halaman Dashboard',
+          expected_result: 'User successfully logs in and is redirected to Dashboard',
           priority: 'critical', prep_status: 'ready', exec_status: 'executed', latest_result: 'pass',
         },
         {
           case_id: 'AUTH-002', module_id: m1Id, feature_id: f1Id, requirement_ref: 'REQ-AUTH-001',
-          title: 'Login gagal dengan password salah 5 kali berturut-turut (Lockout)', test_type: 'negative',
-          preconditions: 'Akun user aktif',
-          test_steps: '1. Masukkan email valid\n2. Masukkan password salah sebanyak 5 kali\n3. Amati respon sistem pada attempt ke-5',
-          test_data: 'Password salah: wrong1, wrong2, wrong3, wrong4, wrong5',
-          expected_result: 'Akun terkunci sementara selama 15 menit dengan pesan error "Terlalu banyak percobaan salah"',
+          title: 'Login failure with 5 consecutive incorrect passwords (Lockout)', test_type: 'negative',
+          preconditions: 'User account is active',
+          test_steps: '1. Enter valid email\n2. Enter incorrect password 5 times\n3. Observe system response on 5th attempt',
+          test_data: 'Wrong passwords: wrong1, wrong2, wrong3, wrong4, wrong5',
+          expected_result: 'Account is temporarily locked for 15 minutes with error message "Too many failed attempts"',
           priority: 'high', prep_status: 'ready', exec_status: 'executed', latest_result: 'pass',
         },
         {
           case_id: 'AUTH-003', module_id: m1Id, feature_id: f1Id, requirement_ref: 'REQ-AUTH-001',
-          title: 'Validasi input format email tidak sesuai standar RFC', test_type: 'validation',
-          preconditions: 'Halaman login terbuka',
-          test_steps: '1. Masukkan format email salah: "user@"\n2. Klik tombol Masuk',
+          title: 'Input validation for email format not conforming to RFC standards', test_type: 'validation',
+          preconditions: 'Login page is open',
+          test_steps: '1. Enter invalid email format: "user@"\n2. Click Login button',
           test_data: 'Email: invalid-email-format',
-          expected_result: 'Validasi field menampilkan pesan "Format email tidak valid"',
+          expected_result: 'Field validation displays error message "Invalid email format"',
           priority: 'medium', prep_status: 'ready', exec_status: 'executed', latest_result: 'pass',
         },
         {
           case_id: 'AUTH-004', module_id: m1Id, feature_id: f2Id, requirement_ref: 'REQ-AUTH-002',
-          title: 'Verifikasi pengiriman kode OTP reset password ke email terdaftar', test_type: 'functional',
-          preconditions: 'User meminta reset password',
-          test_steps: '1. Masukkan email di form lupa password\n2. Klik Kirim OTP\n3. Periksa inbox email',
+          title: 'Verify password reset OTP code is sent to registered email', test_type: 'functional',
+          preconditions: 'User requests password reset',
+          test_steps: '1. Enter email in forgot password form\n2. Click Send OTP\n3. Check email inbox',
           test_data: 'Email: registered@example.com',
-          expected_result: 'Email OTP diterima dalam < 30 detik dengan kode 6 digit',
+          expected_result: 'OTP email is received within < 30 seconds with a 6-digit code',
           priority: 'high', prep_status: 'ready', exec_status: 'executed', latest_result: 'pass',
         },
         {
           case_id: 'AUTH-005', module_id: m1Id, feature_id: f2Id, requirement_ref: 'REQ-AUTH-002',
-          title: 'Verifikasi kegagalan saat memasukkan kode OTP kedaluwarsa (> 5 menit)', test_type: 'boundary',
-          preconditions: 'Kode OTP telah dikirim lebih dari 5 menit yang lalu',
-          test_steps: '1. Tunggu 5 menit 1 detik\n2. Masukkan kode OTP\n3. Klik Verifikasi',
+          title: 'Verify failure when entering expired OTP code (> 5 minutes)', test_type: 'boundary',
+          preconditions: 'OTP code was sent more than 5 minutes ago',
+          test_steps: '1. Wait 5 minutes 1 second\n2. Enter OTP code\n3. Click Verify',
           test_data: 'OTP: 123456 (expired)',
-          expected_result: 'Sistem menolak kode dengan pesan "Kode OTP telah kedaluwarsa"',
+          expected_result: 'System rejects code with error message "OTP code has expired"',
           priority: 'high', prep_status: 'ready', exec_status: 'executed', latest_result: 'fail',
-          defect_ref: 'BUG-AUTH-042', notes: 'Sistem masih menerima OTP pada menit ke-7 karena toleransi cache server terlalu longgar.',
+          defect_ref: 'BUG-AUTH-042', notes: 'System still accepts OTP at minute 7 due to overly lenient server cache tolerance.',
         },
         {
           case_id: 'TRX-001', module_id: m2Id, feature_id: f3Id, requirement_ref: 'REQ-TRX-001',
-          title: 'Generate QRIS dinamis berhasil dengan nominal checkout sesuai', test_type: 'functional',
-          preconditions: 'Keranjang belanja terisi produk senilai Rp 150.000',
-          test_steps: '1. Klik Checkout\n2. Pilih metode pembayaran QRIS\n3. Klik Bayar Sekarang',
-          test_data: 'Nominal: Rp 150.000',
-          expected_result: 'Tampil QRIS code dinamis dengan nominal Rp 150.000 dan countdown 15 menit',
+          title: 'Generate dynamic QRIS successfully with matching checkout amount', test_type: 'functional',
+          preconditions: 'Shopping cart contains items totaling $150',
+          test_steps: '1. Click Checkout\n2. Select QRIS payment method\n3. Click Pay Now',
+          test_data: 'Amount: $150',
+          expected_result: 'Dynamic QRIS code displayed with amount $150 and 15-minute countdown',
           priority: 'critical', prep_status: 'ready', exec_status: 'executed', latest_result: 'pass',
         },
         {
           case_id: 'TRX-002', module_id: m2Id, feature_id: f3Id, requirement_ref: 'REQ-TRX-001',
-          title: 'Callback webhook QRIS sukses mengubah status pesanan menjadi PAID', test_type: 'integration',
-          preconditions: 'Transaksi QRIS aktif dibuat',
-          test_steps: '1. Simulasikan payload callback sukses dari Payment Gateway\n2. Cek status order di DB dan UI',
+          title: 'QRIS webhook callback successfully updates order status to PAID', test_type: 'integration',
+          preconditions: 'Active QRIS transaction created',
+          test_steps: '1. Simulate successful callback payload from Payment Gateway\n2. Check order status in DB and UI',
           test_data: 'Payload: status=settlement',
-          expected_result: 'Status transaksi berubah menjadi PAID secara instan dan notifikasi dikirim ke user',
+          expected_result: 'Transaction status instantly updates to PAID and notification sent to user',
           priority: 'critical', prep_status: 'ready', exec_status: 'executed', latest_result: 'blocked',
-          defect_ref: 'ENV-TRX-009', notes: 'Sandbox payment gateway timeout pada webhook callback URL.',
+          defect_ref: 'ENV-TRX-009', notes: 'Sandbox payment gateway timeout on webhook callback URL.',
         },
         {
           case_id: 'TRX-003', module_id: m2Id, feature_id: f3Id, requirement_ref: 'REQ-TRX-001',
-          title: 'Penanganan transaksi QRIS expired setelah 15 menit tanpa pembayaran', test_type: 'boundary',
-          preconditions: 'QRIS dibuat 15 menit lalu',
-          test_steps: '1. Biarkan QRIS sampai timer 0:00\n2. Coba scan dan bayar melalui aplikasi e-wallet',
+          title: 'Handling expired QRIS transaction after 15 minutes without payment', test_type: 'boundary',
+          preconditions: 'QRIS created 15 minutes ago',
+          test_steps: '1. Wait until QRIS timer reaches 0:00\n2. Attempt to scan and pay via e-wallet',
           test_data: 'Timer: 15m 01s',
-          expected_result: 'Pembayaran ditolak bank dan status pesanan otomatis berubah EXPIRED',
+          expected_result: 'Payment rejected by bank and order status automatically marked EXPIRED',
           priority: 'medium', prep_status: 'ready', exec_status: 'not_run', latest_result: 'not_run',
         },
       ];
@@ -209,7 +216,7 @@ export async function POST(req: NextRequest) {
           `).run(
             newTcId,
             tc.latest_result,
-            tc.latest_result === 'pass' ? 'Sesuai ekspektasi' : tc.notes || 'Hasil berbeda dari ekspektasi',
+            tc.latest_result === 'pass' ? 'As expected' : tc.notes || 'Result differs from expectation',
             tc.defect_ref || null,
             tc.notes || null
           );
@@ -220,12 +227,12 @@ export async function POST(req: NextRequest) {
       db.prepare(`INSERT OR REPLACE INTO tc_sequence (module_prefix, next_seq) VALUES ('AUTH', 6)`).run();
       db.prepare(`INSERT OR REPLACE INTO tc_sequence (module_prefix, next_seq) VALUES ('TRX', 4)`).run();
 
-      logActivity(db, 'seed_data', 'system', null, 'SYSTEM', 'Inisialisasi data sampel QA (modul, requirement, test cases, executions)');
+      logActivity(db, 'seed_data', 'system', null, 'SYSTEM', 'Sample QA data initialized (modules, requirements, test cases, executions)');
 
-      return NextResponse.json({ success: true, message: 'Data sampel berhasil diinisialisasi!' });
+      return NextResponse.json({ success: true, message: 'Sample data initialized successfully!' });
     }
 
-    return NextResponse.json({ error: 'Aksi tidak dikenali' }, { status: 400 });
+    return NextResponse.json({ error: 'Unrecognized action' }, { status: 400 });
   } catch (error) {
     console.error('Seed data error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

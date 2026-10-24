@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner, EmptyState, Pagination } from '@/components/ui/Shared';
 import { History, Search, Filter, Eye, GitCommit, ArrowRight, Clock } from 'lucide-react';
@@ -15,7 +16,6 @@ export default function ChangeLogPage() {
   const [selectedLog, setSelectedLog] = useState<ChangeLog | null>(null);
 
   const fetchLogs = async (page = 1) => {
-    setLoading(true);
     try {
       const params = new URLSearchParams({
         page: String(page),
@@ -48,17 +48,20 @@ export default function ChangeLogPage() {
 
   return (
     <AppShell>
-      <div className="page-header">
+      <header className="page-header main-header">
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <History size={20} style={{ color: 'var(--primary)' }} />
             Audit & Change Log
           </h1>
           <p className="page-subtitle">
-            Catatan historis lengkap seluruh perubahan test case, requirement, modul, dan status pengujian
+            Complete historical audit log of changes to test cases, requirements, modules, and testing statuses
           </p>
         </div>
-      </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <ThemeToggle />
+        </div>
+      </header>
 
       {/* Filter Bar */}
       <div className="card card-sm" style={{ marginBottom: 20 }}>
@@ -69,11 +72,11 @@ export default function ChangeLogPage() {
             value={entityType}
             onChange={e => setEntityType(e.target.value)}
           >
-            <option value="">Semua Tipe Entitas</option>
+            <option value="">All Entity Types</option>
             <option value="test_case">Test Case</option>
             <option value="requirement">Requirement / PRD</option>
-            <option value="module">Modul</option>
-            <option value="feature">Fitur</option>
+            <option value="module">Module</option>
+            <option value="feature">Feature</option>
           </select>
         </div>
       </div>
@@ -84,8 +87,8 @@ export default function ChangeLogPage() {
       ) : logs.length === 0 ? (
         <EmptyState
           icon={<History size={32} />}
-          title="Belum ada riwayat perubahan"
-          description="Aktivitas pembuatan, pembaruan, dan perubahan status test case atau requirement akan tercatat di sini."
+          title="No change history yet"
+          description="Creation, update, and status change activities for test cases and requirements will be logged here."
         />
       ) : (
         <>
@@ -93,12 +96,12 @@ export default function ChangeLogPage() {
             <table>
               <thead>
                 <tr>
-                  <th style={{ width: 150 }}>Waktu</th>
-                  <th style={{ width: 110 }}>Entitas</th>
+                  <th style={{ width: 150 }}>Timestamp</th>
+                  <th style={{ width: 110 }}>Entity</th>
                   <th style={{ width: 130 }}>Ref ID</th>
-                  <th style={{ width: 110 }}>Tipe Ubah</th>
-                  <th>Alasan / Keterangan</th>
-                  <th style={{ width: 130 }}>Ref Requirement</th>
+                  <th style={{ width: 110 }}>Change Type</th>
+                  <th>Reason / Description</th>
+                  <th style={{ width: 130 }}>Requirement Ref</th>
                   <th style={{ width: 90, textAlign: 'right' }}>Diff</th>
                 </tr>
               </thead>
@@ -106,7 +109,7 @@ export default function ChangeLogPage() {
                 {logs.map(log => (
                   <tr key={log.id}>
                     <td style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
-                      {new Date(log.changed_at).toLocaleString('id-ID')}
+                      {new Date(log.changed_at).toLocaleString('en-US')}
                     </td>
                     <td>
                       <span className="badge" style={{ background: 'var(--surface-3)', textTransform: 'capitalize' }}>
@@ -133,7 +136,7 @@ export default function ChangeLogPage() {
                       </div>
                       {log.changed_fields && (
                         <div style={{ fontSize: 11, color: 'var(--foreground-muted)', marginTop: 2 }}>
-                          Field diubah: {log.changed_fields}
+                          Fields changed: {log.changed_fields}
                         </div>
                       )}
                     </td>
@@ -148,7 +151,7 @@ export default function ChangeLogPage() {
                       {(log.old_values || log.new_values) && (
                         <button
                           className="btn btn-secondary btn-icon btn-sm"
-                          title="Lihat Detail Nilai Lama vs Baru"
+                          title="View Old vs New Details"
                           onClick={() => setSelectedLog(log)}
                         >
                           <Eye size={12} />
@@ -173,20 +176,20 @@ export default function ChangeLogPage() {
       <Modal
         isOpen={Boolean(selectedLog)}
         onClose={() => setSelectedLog(null)}
-        title={`Detail Perubahan: ${selectedLog?.entity_ref} (${selectedLog?.change_type})`}
+        title={`Change Details: ${selectedLog?.entity_ref} (${selectedLog?.change_type})`}
         footer={
-          <button className="btn btn-secondary" onClick={() => setSelectedLog(null)}>Tutup</button>
+          <button className="btn btn-secondary" onClick={() => setSelectedLog(null)}>Close</button>
         }
       >
         {selectedLog && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="grid-2">
               <div>
-                <div style={{ fontSize: 12, color: 'var(--foreground-muted)', marginBottom: 2 }}>Waktu Perubahan</div>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{new Date(selectedLog.changed_at).toLocaleString('id-ID')}</div>
+                <div style={{ fontSize: 12, color: 'var(--foreground-muted)', marginBottom: 2 }}>Change Timestamp</div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>{new Date(selectedLog.changed_at).toLocaleString('en-US')}</div>
               </div>
               <div>
-                <div style={{ fontSize: 12, color: 'var(--foreground-muted)', marginBottom: 2 }}>Alasan</div>
+                <div style={{ fontSize: 12, color: 'var(--foreground-muted)', marginBottom: 2 }}>Reason</div>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{selectedLog.reason || '—'}</div>
               </div>
             </div>
@@ -195,28 +198,28 @@ export default function ChangeLogPage() {
               {/* Old Values */}
               <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 8 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--error)', marginBottom: 8 }}>
-                  🔴 Nilai Sebelumnya (Old):
+                  🔴 Previous Values (Old):
                 </div>
                 {selectedLog.old_values ? (
                   <pre style={{ fontSize: 11, color: 'var(--foreground)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                     {JSON.stringify(parseJson(selectedLog.old_values), null, 2)}
                   </pre>
                 ) : (
-                  <div style={{ fontSize: 12, color: 'var(--foreground-dim)', fontStyle: 'italic' }}>Tidak ada (entitas baru)</div>
+                  <div style={{ fontSize: 12, color: 'var(--foreground-dim)', fontStyle: 'italic' }}>None (new entity)</div>
                 )}
               </div>
 
               {/* New Values */}
               <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 8 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--success)', marginBottom: 8 }}>
-                  🟢 Nilai Sesudahnya (New):
+                  🟢 New Values (New):
                 </div>
                 {selectedLog.new_values ? (
                   <pre style={{ fontSize: 11, color: 'var(--foreground)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                     {JSON.stringify(parseJson(selectedLog.new_values), null, 2)}
                   </pre>
                 ) : (
-                  <div style={{ fontSize: 12, color: 'var(--foreground-dim)', fontStyle: 'italic' }}>Tidak ada</div>
+                  <div style={{ fontSize: 12, color: 'var(--foreground-dim)', fontStyle: 'italic' }}>None</div>
                 )}
               </div>
             </div>

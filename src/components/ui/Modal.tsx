@@ -50,7 +50,7 @@ interface ConfirmModalProps {
   loading?: boolean;
 }
 
-export function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confirmLabel = 'Konfirmasi', danger, loading }: ConfirmModalProps) {
+export function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confirmLabel = 'Confirm', danger, loading }: ConfirmModalProps) {
   return (
     <Modal
       isOpen={isOpen}
@@ -58,7 +58,7 @@ export function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confi
       title={title}
       footer={
         <>
-          <button className="btn btn-secondary" onClick={onClose} disabled={loading}>Batal</button>
+          <button className="btn btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
           <button
             className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`}
             onClick={onConfirm}

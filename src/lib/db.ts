@@ -175,6 +175,21 @@ function initSchema(db: Database.Database) {
       FOREIGN KEY (module_id) REFERENCES modules(id),
       FOREIGN KEY (feature_id) REFERENCES features(id)
     );
+
+    -- Test case comments & collaborator feedback
+    CREATE TABLE IF NOT EXISTS test_case_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      test_case_id INTEGER NOT NULL,
+      author_name TEXT NOT NULL,
+      author_role TEXT NOT NULL DEFAULT 'pm',
+      content TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      reply TEXT,
+      replied_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      resolved_at DATETIME,
+      FOREIGN KEY (test_case_id) REFERENCES test_cases(id) ON DELETE CASCADE
+    );
   `);
 }
 

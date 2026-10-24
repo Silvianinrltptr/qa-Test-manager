@@ -1,10 +1,14 @@
 import { getDb, generateCaseId, logActivity, logChange } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa', 'dev_pm']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const { searchParams } = new URL(req.url);
     
@@ -52,7 +56,8 @@ export async function GET(req: NextRequest) {
     `).get(...params) as { count: number };
 
     const testCases = db.prepare(`
-      SELECT tc.*, m.name as module_name, m.prefix as module_prefix, f.name as feature_name
+      SELECT tc.*, m.name as module_name, m.prefix as module_prefix, f.name as feature_name,
+        (SELECT COUNT(*) FROM test_case_comments WHERE test_case_id = tc.id) as comment_count
       FROM test_cases tc
       JOIN modules m ON m.id = tc.module_id
       JOIN features f ON f.id = tc.feature_id
@@ -78,6 +83,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const { errorResponse } = await requireAuth(req, ['qa']);
+    if (errorResponse) return errorResponse;
+
     const db = getDb();
     const body = await req.json();
     const { cases } = body; // array of cases
@@ -94,9 +102,32 @@ export async function POST(req: NextRequest) {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
     `);
 
-    const insertMany = db.transaction((cases: any[]) => {
-      const results = [];
-      for (const c of cases) {
+    interface CreateTestCaseInput {
+      module_id: number | string;
+      feature_id: number | string;
+      requirement_ref?: string;
+      title: string;
+      test_type?: string;
+      preconditions?: string;
+      test_steps?: string;
+      test_data?: string;
+      expected_result?: string;
+      priority?: string;
+      prep_status?: string;
+      notes?: string;
+    }
+
+    interface TestCaseInsertResult {
+      success?: boolean;
+      error?: string;
+      caseId?: string;
+      id?: number;
+      case?: CreateTestCaseInput;
+    }
+
+    const insertMany = db.transaction((casesList: CreateTestCaseInput[]) => {
+      const results: TestCaseInsertResult[] = [];
+      for (const c of casesList) {
         if (!c.module_id || !c.feature_id || !c.title?.trim()) {
           results.push({ error: 'Missing required fields', case: c });
           continue;
@@ -116,7 +147,7 @@ export async function POST(req: NextRequest) {
         );
 
         const newCase = db.prepare('SELECT * FROM test_cases WHERE case_id = ?').get(caseId) as { id: number };
-        logActivity(db, 'created', 'test_case', newCase.id, caseId, `Test case "${c.title}" dibuat`);
+        logActivity(db, 'created', 'test_case', newCase.id, caseId, `Test case "${c.title}" created`);
         logChange(db, {
           entityType: 'test_case', entityId: newCase.id, entityRef: caseId,
           changeType: 'created', newValues: c
@@ -127,9 +158,9 @@ export async function POST(req: NextRequest) {
       return results;
     });
 
-    const results = insertMany(cases);
-    const succeeded = results.filter((r: any) => r.success).length;
-    const failed = results.filter((r: any) => r.error).length;
+    const results = insertMany(cases as CreateTestCaseInput[]);
+    const succeeded = results.filter((r: TestCaseInsertResult) => r.success).length;
+    const failed = results.filter((r: TestCaseInsertResult) => r.error).length;
 
     return NextResponse.json({ results, succeeded, failed }, { status: 201 });
   } catch (error) {

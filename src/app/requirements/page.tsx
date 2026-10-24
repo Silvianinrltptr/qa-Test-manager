@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { EmptyState, LoadingSpinner } from '@/components/ui/Shared';
 import { useToast } from '@/components/ui/Toast';
@@ -29,13 +30,22 @@ interface RequirementItem {
   test_case_count: number;
 }
 
+interface RequirementHistoryItem {
+  id: number;
+  requirement_id: number;
+  title: string;
+  description: string | null;
+  change_type: string;
+  version: number;
+  changed_at: string;
+}
+
 export default function RequirementsPage() {
   const toast = useToast();
   const [requirements, setRequirements] = useState<RequirementItem[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [filters, setFilters] = useState({
     search: '',
     moduleId: '',
@@ -49,7 +59,7 @@ export default function RequirementsPage() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RequirementItem | null>(null);
   const [selectedReq, setSelectedReq] = useState<RequirementItem | null>(null);
-  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [historyData, setHistoryData] = useState<RequirementHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -72,7 +82,6 @@ export default function RequirementsPage() {
   });
 
   const fetchRequirements = async () => {
-    setLoading(true);
     try {
       const params = new URLSearchParams({
         ...(filters.moduleId && { moduleId: filters.moduleId }),
@@ -115,7 +124,7 @@ export default function RequirementsPage() {
 
   const handleSaveCreate = async () => {
     if (!createForm.title.trim()) {
-      toast.error('Judul requirement wajib diisi');
+      toast.error('Requirement title is required');
       return;
     }
     setSaving(true);
@@ -126,12 +135,12 @@ export default function RequirementsPage() {
         body: JSON.stringify(createForm),
       });
       if (res.ok) {
-        toast.success('Requirement berhasil dibuat');
+        toast.success('Requirement created successfully');
         setShowCreateModal(false);
         fetchRequirements();
       } else {
         const err = await res.json();
-        toast.error(err.error || 'Gagal menyimpan requirement');
+        toast.error(err.error || 'Failed to save requirement');
       }
     } finally {
       setSaving(false);
@@ -153,7 +162,7 @@ export default function RequirementsPage() {
   const handleSaveEdit = async () => {
     if (!selectedReq) return;
     if (!editForm.title.trim()) {
-      toast.error('Judul requirement wajib diisi');
+      toast.error('Requirement title is required');
       return;
     }
     setSaving(true);
@@ -164,12 +173,12 @@ export default function RequirementsPage() {
         body: JSON.stringify(editForm),
       });
       if (res.ok) {
-        toast.success(`Requirement ${selectedReq.ref_id} diperbarui`);
+        toast.success(`Requirement ${selectedReq.ref_id} updated`);
         setShowEditModal(false);
         fetchRequirements();
       } else {
         const err = await res.json();
-        toast.error(err.error || 'Gagal memperbarui');
+        toast.error(err.error || 'Failed to update');
       }
     } finally {
       setSaving(false);
@@ -196,38 +205,39 @@ export default function RequirementsPage() {
     try {
       const res = await fetch(`/api/requirements/${deleteTarget.id}`, { method: 'DELETE' });
       if (res.ok) {
-        toast.success(`Requirement ${deleteTarget.ref_id} diarsipkan`);
+        toast.success(`Requirement ${deleteTarget.ref_id} archived`);
         setDeleteTarget(null);
         fetchRequirements();
       } else {
-        toast.error('Gagal mengarsipkan requirement');
+        toast.error('Failed to archive requirement');
       }
     } catch {
-      toast.error('Terjadi kesalahan');
+      toast.error('An error occurred');
     }
   };
 
   return (
     <AppShell>
-      <div className="page-header">
+      <header className="page-header main-header">
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <FileCheck2 size={20} style={{ color: 'var(--primary)' }} />
             PRD & Requirements
           </h1>
           <p className="page-subtitle">
-            Kelola spesifikasi requirement, versi perubahan, dan hubungkan dengan test case
+            Manage requirement specifications, version changes, and link them to test cases
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Link href="/impact-analysis" className="btn btn-secondary">
             <AlertTriangle size={14} style={{ color: 'var(--warning)' }} /> Impact Analysis
           </Link>
           <button className="btn btn-primary" onClick={handleOpenCreate} id="btn-create-requirement">
-            <Plus size={14} /> Tambah Requirement
+            <Plus size={14} /> Add Requirement
           </button>
+          <ThemeToggle />
         </div>
-      </div>
+      </header>
 
       {/* Filters Bar */}
       <div className="card card-sm" style={{ marginBottom: 20 }}>
@@ -236,7 +246,7 @@ export default function RequirementsPage() {
             <Search size={14} className="search-icon" />
             <input
               className="form-control"
-              placeholder="Cari ref ID, judul, atau konten..."
+              placeholder="Search ref ID, title, or content..."
               value={filters.search}
               onChange={e => setFilters(p => ({ ...p, search: e.target.value }))}
             />
@@ -247,7 +257,7 @@ export default function RequirementsPage() {
             value={filters.moduleId}
             onChange={e => setFilters(p => ({ ...p, moduleId: e.target.value, featureId: '' }))}
           >
-            <option value="">Semua Modul</option>
+            <option value="">All Modules</option>
             {modules.map(m => (
               <option key={m.id} value={m.id}>{m.name}</option>
             ))}
@@ -258,7 +268,7 @@ export default function RequirementsPage() {
             value={filters.featureId}
             onChange={e => setFilters(p => ({ ...p, featureId: e.target.value }))}
           >
-            <option value="">Semua Fitur</option>
+            <option value="">All Features</option>
             {filteredFeatures.map(f => (
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
@@ -269,10 +279,10 @@ export default function RequirementsPage() {
             value={filters.status}
             onChange={e => setFilters(p => ({ ...p, status: e.target.value }))}
           >
-            <option value="all">Semua Status</option>
-            <option value="active">Aktif</option>
-            <option value="obsolete">Usang</option>
-            <option value="archived">Diarsipkan</option>
+            <option value="all">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="obsolete">Obsolete</option>
+            <option value="archived">Archived</option>
           </select>
         </div>
       </div>
@@ -283,11 +293,11 @@ export default function RequirementsPage() {
       ) : requirements.length === 0 ? (
         <EmptyState
           icon={<FileCheck2 size={32} />}
-          title="Belum ada requirement"
-          description="Tambahkan spesifikasi requirement pertama untuk melacak cakupan testing dan analisis dampak perubahan."
+          title="No requirements yet"
+          description="Add your first requirement specification to track testing coverage and change impact analysis."
           action={
             <button className="btn btn-primary" onClick={handleOpenCreate}>
-              <Plus size={14} /> Tambah Requirement
+              <Plus size={14} /> Add Requirement
             </button>
           }
         />
@@ -297,13 +307,13 @@ export default function RequirementsPage() {
             <thead>
               <tr>
                 <th style={{ width: 120 }}>Ref ID</th>
-                <th>Judul & Deskripsi</th>
-                <th style={{ width: 180 }}>Modul & Fitur</th>
-                <th style={{ width: 90 }}>Versi</th>
-                <th style={{ width: 110 }}>Tipe Ubah</th>
+                <th>Title & Description</th>
+                <th style={{ width: 180 }}>Module & Feature</th>
+                <th style={{ width: 90 }}>Version</th>
+                <th style={{ width: 110 }}>Change Type</th>
                 <th style={{ width: 100 }}>Status</th>
-                <th style={{ width: 110 }}>Test Case</th>
-                <th style={{ width: 140, textAlign: 'right' }}>Aksi</th>
+                <th style={{ width: 110 }}>Test Cases</th>
+                <th style={{ width: 140, textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -367,16 +377,16 @@ export default function RequirementsPage() {
                         className="badge badge-success"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}
                       >
-                        <ClipboardList size={11} /> {req.test_case_count} Case
+                        <ClipboardList size={11} /> {req.test_case_count} {req.test_case_count === 1 ? 'Case' : 'Cases'}
                       </Link>
                     ) : (
                       <Link
                         href={`/ai-generator?moduleId=${req.module_id || ''}&featureId=${req.feature_id || ''}`}
                         className="badge badge-warning"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}
-                        title="0 test case linked. Klik untuk generate!"
+                        title="0 test cases linked. Click to generate!"
                       >
-                        <Sparkles size={11} /> 0 Case
+                        <Sparkles size={11} /> 0 Cases
                       </Link>
                     )}
                   </td>
@@ -384,7 +394,7 @@ export default function RequirementsPage() {
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
                       <button
                         className="btn btn-secondary btn-icon"
-                        title="Riwayat Versi"
+                        title="Version History"
                         onClick={() => handleOpenHistory(req)}
                       >
                         <History size={13} />
@@ -398,7 +408,7 @@ export default function RequirementsPage() {
                       </button>
                       <button
                         className="btn btn-danger btn-icon"
-                        title="Arsipkan Requirement"
+                        title="Archive Requirement"
                         onClick={() => setDeleteTarget(req)}
                       >
                         <Trash2 size={13} />
@@ -416,13 +426,13 @@ export default function RequirementsPage() {
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        title="Tambah Requirement Baru"
+        title="Add New Requirement"
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>Batal</button>
+            <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSaveCreate} disabled={saving} id="btn-save-new-req">
               {saving ? <span className="spinner" /> : <Plus size={13} />}
-              Simpan Requirement
+              Save Requirement
             </button>
           </>
         }
@@ -430,26 +440,26 @@ export default function RequirementsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div className="grid-2">
             <div className="form-group">
-              <label className="form-label">Modul</label>
+              <label className="form-label">Module</label>
               <select
                 className="form-control"
                 value={createForm.module_id}
                 onChange={e => setCreateForm(p => ({ ...p, module_id: e.target.value, feature_id: '' }))}
               >
-                <option value="">Pilih Modul</option>
+                <option value="">Select Module</option>
                 {modules.map(m => (
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Fitur</label>
+              <label className="form-label">Feature</label>
               <select
                 className="form-control"
                 value={createForm.feature_id}
                 onChange={e => setCreateForm(p => ({ ...p, feature_id: e.target.value }))}
               >
-                <option value="">Pilih Fitur</option>
+                <option value="">Select Feature</option>
                 {createFormFeatures.map(f => (
                   <option key={f.id} value={f.id}>{f.name}</option>
                 ))}
@@ -458,31 +468,31 @@ export default function RequirementsPage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">ID Referensi (Opsional, cth: REQ-001)</label>
+            <label className="form-label">Reference ID (Optional, e.g. REQ-001)</label>
             <input
               className="form-control"
-              placeholder="Kosongkan untuk auto-generate"
+              placeholder="Leave empty to auto-generate"
               value={createForm.ref_id}
               onChange={e => setCreateForm(p => ({ ...p, ref_id: e.target.value }))}
             />
           </div>
 
           <div className="form-group">
-            <label className="form-label">Judul Requirement <span style={{ color: 'var(--error)' }}>*</span></label>
+            <label className="form-label">Requirement Title <span style={{ color: 'var(--error)' }}>*</span></label>
             <input
               className="form-control"
-              placeholder="cth: Validasi Email saat Pendaftaran Akun"
+              placeholder="e.g. Email Validation on Account Registration"
               value={createForm.title}
               onChange={e => setCreateForm(p => ({ ...p, title: e.target.value }))}
             />
           </div>
 
           <div className="form-group">
-            <label className="form-label">Deskripsi Spesifikasi / PRD Content</label>
+            <label className="form-label">Specification Description / PRD Content</label>
             <textarea
               className="form-control"
               rows={4}
-              placeholder="Tuliskan aturan bisnis, kriteria penerimaan (acceptance criteria), atau teks requirement..."
+              placeholder="Write business rules, acceptance criteria, or requirement text..."
               value={createForm.description}
               onChange={e => setCreateForm(p => ({ ...p, description: e.target.value }))}
             />
@@ -494,13 +504,13 @@ export default function RequirementsPage() {
       <Modal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
-        title={`Ubah Requirement: ${selectedReq?.ref_id}`}
+        title={`Edit Requirement: ${selectedReq?.ref_id}`}
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setShowEditModal(false)}>Batal</button>
+            <button className="btn btn-secondary" onClick={() => setShowEditModal(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSaveEdit} disabled={saving} id="btn-save-edit-req">
               {saving ? <span className="spinner" /> : <Edit2 size={13} />}
-              Simpan Perubahan (v{(selectedReq?.version || 1) + 1})
+              Save Changes (v{(selectedReq?.version || 1) + 1})
             </button>
           </>
         }
@@ -508,22 +518,22 @@ export default function RequirementsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div className="info-box">
             <span style={{ fontSize: 12 }}>
-              Setiap kali requirement diperbarui, nomor versi otomatis bertambah (v{(selectedReq?.version || 1) + 1}) dan riwayat perubahan dicatat untuk <strong>Impact Analysis</strong>.
+              Every time a requirement is updated, the version number automatically increments (v{(selectedReq?.version || 1) + 1}) and change history is recorded for <strong>Impact Analysis</strong>.
             </span>
           </div>
 
           <div className="grid-2">
             <div className="form-group">
-              <label className="form-label">Tipe Perubahan</label>
+              <label className="form-label">Change Type</label>
               <select
                 className="form-control"
                 value={editForm.change_type}
                 onChange={e => setEditForm(p => ({ ...p, change_type: e.target.value }))}
               >
-                <option value="updated">Diperbarui (Updated)</option>
-                <option value="modified">Dimodifikasi (Modified)</option>
-                <option value="scope_reduced">Cakupan Dikurangi (Scope Reduced)</option>
-                <option value="clarification">Klarifikasi</option>
+                <option value="updated">Updated</option>
+                <option value="modified">Modified</option>
+                <option value="scope_reduced">Scope Reduced</option>
+                <option value="clarification">Clarification</option>
               </select>
             </div>
             <div className="form-group">
@@ -533,15 +543,15 @@ export default function RequirementsPage() {
                 value={editForm.status}
                 onChange={e => setEditForm(p => ({ ...p, status: e.target.value }))}
               >
-                <option value="active">Aktif</option>
-                <option value="obsolete">Usang (Obsolete)</option>
-                <option value="archived">Diarsipkan</option>
+                <option value="active">Active</option>
+                <option value="obsolete">Obsolete</option>
+                <option value="archived">Archived</option>
               </select>
             </div>
           </div>
 
           <div className="form-group">
-            <label className="form-label">Judul Requirement <span style={{ color: 'var(--error)' }}>*</span></label>
+            <label className="form-label">Requirement Title <span style={{ color: 'var(--error)' }}>*</span></label>
             <input
               className="form-control"
               value={editForm.title}
@@ -550,7 +560,7 @@ export default function RequirementsPage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Deskripsi Spesifikasi</label>
+            <label className="form-label">Specification Description</label>
             <textarea
               className="form-control"
               rows={4}
@@ -560,10 +570,10 @@ export default function RequirementsPage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Alasan / Ringkasan Perubahan</label>
+            <label className="form-label">Reason / Change Summary</label>
             <input
               className="form-control"
-              placeholder="cth: Mengubah batas lockout dari 3x menjadi 5x sesuai masukan Product Owner"
+              placeholder="e.g. Changed lockout limit from 3x to 5x based on Product Owner feedback"
               value={editForm.reason}
               onChange={e => setEditForm(p => ({ ...p, reason: e.target.value }))}
             />
@@ -575,16 +585,16 @@ export default function RequirementsPage() {
       <Modal
         isOpen={showHistoryModal}
         onClose={() => setShowHistoryModal(false)}
-        title={`Riwayat Versi: ${selectedReq?.ref_id}`}
+        title={`Version History: ${selectedReq?.ref_id}`}
         footer={
-          <button className="btn btn-secondary" onClick={() => setShowHistoryModal(false)}>Tutup</button>
+          <button className="btn btn-secondary" onClick={() => setShowHistoryModal(false)}>Close</button>
         }
       >
         {loadingHistory ? (
           <LoadingSpinner />
         ) : historyData.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '20px', color: 'var(--foreground-muted)' }}>
-            Belum ada riwayat tercatat.
+            No history recorded yet.
           </div>
         ) : (
           <div className="timeline">
@@ -595,10 +605,10 @@ export default function RequirementsPage() {
                 </div>
                 <div className="timeline-content">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span className="badge badge-primary">Versi {h.version}</span>
+                    <span className="badge badge-primary">Version {h.version}</span>
                     <span className="badge" style={{ background: 'var(--surface-3)' }}>{h.change_type}</span>
                     <span style={{ fontSize: 11, color: 'var(--foreground-muted)' }}>
-                      {new Date(h.changed_at).toLocaleString('id-ID')}
+                      {new Date(h.changed_at).toLocaleString('en-US')}
                     </span>
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{h.title}</div>
@@ -619,9 +629,9 @@ export default function RequirementsPage() {
         isOpen={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
-        title="Arsipkan Requirement"
-        message={`Apakah Anda yakin ingin mengarsipkan requirement "${deleteTarget?.ref_id} - ${deleteTarget?.title}"? Data tidak akan dihapus permanen agar jejak pengujian tetap terjaga.`}
-        confirmLabel="Arsipkan"
+        title="Archive Requirement"
+        message={`Are you sure you want to archive requirement "${deleteTarget?.ref_id} - ${deleteTarget?.title}"? Data will not be permanently deleted so audit trails are preserved.`}
+        confirmLabel="Archive"
         danger
       />
     </AppShell>
