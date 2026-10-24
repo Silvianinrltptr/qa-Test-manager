@@ -45,6 +45,7 @@ async function runTests() {
     assert(!pageCode.includes('Module Quality Distribution'), 'Module Quality Distribution section must be absent');
     // 3. Kept dashboard sections
     assert(pageCode.includes('Progress by Module'), 'Progress by Module section must be present');
+    assert(pageCode.includes('id="btn-refresh-dashboard"'), 'Refresh button must be present in tab row');
   });
 
   // 2. Developer & PM Read Access to APIs without password
@@ -206,6 +207,12 @@ async function runTests() {
 
   // 10. QA Resolves Comment and execution result is NOT altered
   await test('QA resolving feedback item preserves test case execution result as not_run', async () => {
+    // Get current execution status before resolving comment
+    const beforeRes = await fetch(`${BASE_URL}/api/test-cases/9`, { headers: { Cookie: qaCookie } });
+    const beforeData = await beforeRes.json();
+    const expectedResult = beforeData.testCase.latest_result;
+    const expectedExecStatus = beforeData.testCase.exec_status;
+
     const res = await fetch(`${BASE_URL}/api/comments/${createdCommentId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: qaCookie },
@@ -218,12 +225,12 @@ async function runTests() {
     const data = await res.json();
     assert.strictEqual(data.status, 'resolved');
 
-    // Verify test case 9 execution status
+    // Verify test case 9 execution status remains unchanged
     const tcRes = await fetch(`${BASE_URL}/api/test-cases/9`, { headers: { Cookie: qaCookie } });
     assert.strictEqual(tcRes.status, 200);
     const tcData = await tcRes.json();
-    assert.strictEqual(tcData.testCase.latest_result, 'not_run', 'Resolving comment must NOT change execution result');
-    assert.strictEqual(tcData.testCase.exec_status, 'not_run', 'Execution status must remain not_run');
+    assert.strictEqual(tcData.testCase.latest_result, expectedResult, 'Resolving comment must NOT change execution result');
+    assert.strictEqual(tcData.testCase.exec_status, expectedExecStatus, 'Execution status must remain unchanged');
   });
 
   // 11. Cleanup test comment to preserve exact baseline database rows
