@@ -1,0 +1,238 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -------------------------------------------------------------
+// Modules
+// -------------------------------------------------------------
+model Module {
+  id          Int           @id @default(autoincrement())
+  name        String
+  description String?
+  prefix      String        @unique
+  status      String        @default("active")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at")
+
+  features     Feature[]
+  requirements Requirement[]
+  testCases    TestCase[]
+  aiDrafts     AiDraft[]
+
+  @@map("modules")
+}
+
+// -------------------------------------------------------------
+// Features
+// -------------------------------------------------------------
+model Feature {
+  id          Int           @id @default(autoincrement())
+  moduleId    Int           @map("module_id")
+  name        String
+  description String?
+  status      String        @default("active")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at")
+
+  module       Module        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  requirements Requirement[]
+  testCases    TestCase[]
+  aiDrafts     AiDraft[]
+
+  @@map("features")
+}
+
+// -------------------------------------------------------------
+// Requirements & History
+// -------------------------------------------------------------
+model Requirement {
+  id          Int                  @id @default(autoincrement())
+  moduleId    Int?                 @map("module_id")
+  featureId   Int?                 @map("feature_id")
+  refId       String?              @map("ref_id")
+  title       String
+  description String?
+  changeType  String?              @default("new") @map("change_type")
+  status      String?              @default("active")
+  version     Int?                 @default(1)
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @default(now()) @updatedAt @map("updated_at")
+
+  module      Module?              @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  feature     Feature?             @relation(fields: [featureId], references: [id], onDelete: SetNull)
+  history     RequirementHistory[]
+
+  @@map("requirements")
+}
+
+model RequirementHistory {
+  id            Int         @id @default(autoincrement())
+  requirementId Int         @map("requirement_id")
+  title         String?
+  description   String?
+  changeType    String?     @map("change_type")
+  version       Int?
+  changedAt     DateTime    @default(now()) @map("changed_at")
+
+  requirement   Requirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+
+  @@map("requirement_history")
+}
+
+// -------------------------------------------------------------
+// Test Cases
+// -------------------------------------------------------------
+model TestCase {
+  id              Int               @id @default(autoincrement())
+  caseId          String            @unique @map("case_id")
+  moduleId        Int               @map("module_id")
+  featureId       Int               @map("feature_id")
+  requirementRef  String?           @map("requirement_ref")
+  title           String
+  testType        String?           @default("functional") @map("test_type")
+  preconditions   String?
+  testSteps       String?           @map("test_steps")
+  testData        String?           @map("test_data")
+  expectedResult  String?           @map("expected_result")
+  actualResult    String?           @map("actual_result")
+  priority        String?           @default("medium")
+  prepStatus      String?           @default("draft") @map("prep_status")
+  execStatus      String?           @default("not_run") @map("exec_status")
+  latestResult    String?           @default("not_run") @map("latest_result")
+  evidence        String?
+  defectRef       String?           @map("defect_ref")
+  notes           String?
+  lifecycleStatus String?           @default("active") @map("lifecycle_status")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at")
+
+  module          Module            @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  feature         Feature           @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  executions      Execution[]
+  comments        TestCaseComment[]
+
+  @@map("test_cases")
+}
+
+// -------------------------------------------------------------
+// Sequence Generator for Case IDs (e.g., AUTH-001)
+// -------------------------------------------------------------
+model TcSequence {
+  modulePrefix String @id @map("module_prefix")
+  nextSeq      Int?   @default(1) @map("next_seq")
+
+  @@map("tc_sequence")
+}
+
+// -------------------------------------------------------------
+// Executions
+// -------------------------------------------------------------
+model Execution {
+  id           Int      @id @default(autoincrement())
+  testCaseId   Int      @map("test_case_id")
+  execDate     DateTime @default(now()) @map("exec_date")
+  environment  String?
+  actualResult String?  @map("actual_result")
+  result       String
+  evidence     String?
+  defectRef    String?  @map("defect_ref")
+  notes        String?
+  isRetest     Int?     @default(0) @map("is_retest")
+
+  testCase     TestCase @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@map("executions")
+}
+
+// -------------------------------------------------------------
+// Change Log & Audit
+// -------------------------------------------------------------
+model ChangeLog {
+  id             Int      @id @default(autoincrement())
+  entityType     String   @map("entity_type")
+  entityId       Int      @map("entity_id")
+  entityRef      String?  @map("entity_ref")
+  changeType     String   @map("change_type")
+  changedFields  String?  @map("changed_fields")
+  oldValues      String?  @map("old_values")
+  newValues      String?  @map("new_values")
+  reason         String?
+  requirementRef String?  @map("requirement_ref")
+  changedAt      DateTime @default(now()) @map("changed_at")
+
+  @@map("change_log")
+}
+
+// -------------------------------------------------------------
+// Weekly Snapshots
+// -------------------------------------------------------------
+model WeeklySnapshot {
+  id             Int      @id @default(autoincrement())
+  weekStart      DateTime @map("week_start")
+  weekEnd        DateTime @map("week_end")
+  snapshotData   String   @map("snapshot_data")
+  notes          String?
+  activities     String?
+  nextPriorities String?  @map("next_priorities")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("weekly_snapshots")
+}
+
+// -------------------------------------------------------------
+// Activity Log
+// -------------------------------------------------------------
+model ActivityLog {
+  id          Int      @id @default(autoincrement())
+  action      String
+  entityType  String?  @map("entity_type")
+  entityId    Int?     @map("entity_id")
+  entityRef   String?  @map("entity_ref")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("activity_log")
+}
+
+// -------------------------------------------------------------
+// AI Drafts
+// -------------------------------------------------------------
+model AiDraft {
+  id        Int      @id @default(autoincrement())
+  sessionId String   @map("session_id")
+  moduleId  Int?     @map("module_id")
+  featureId Int?     @map("feature_id")
+  draftData String   @map("draft_data")
+  status    String?  @default("pending")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  module    Module?  @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  feature   Feature? @relation(fields: [featureId], references: [id], onDelete: SetNull)
+
+  @@map("ai_drafts")
+}
+
+// -------------------------------------------------------------
+// Test Case Comments (PM / Developer / QA Collaboration)
+// -------------------------------------------------------------
+model TestCaseComment {
+  id         Int       @id @default(autoincrement())
+  testCaseId Int       @map("test_case_id")
+  authorName String    @map("author_name")
+  authorRole String    @default("pm") @map("author_role")
+  content    String
+  status     String    @default("pending")
+  reply      String?
+  repliedAt  DateTime? @map("replied_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  resolvedAt DateTime? @map("resolved_at")
+
+  testCase   TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@map("test_case_comments")
+}
