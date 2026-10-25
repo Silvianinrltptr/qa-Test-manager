@@ -27,12 +27,12 @@ export async function POST(req: NextRequest) {
         const getVal = (field: string) => {
           const col = fieldMap?.[field];
           const val = col ? row[col] : row[field];
-          return val !== undefined && val !== null ? String(val) : '';
+          return val !== undefined && val !== null ? String(val).trim() : '';
         };
 
         const moduleIdRaw = getVal('module_id');
         const featureIdRaw = getVal('feature_id');
-        const title = getVal('title')?.trim();
+        const title = getVal('title');
 
         if (!title) {
           results.push({ rowIndex: i, status: 'error', error: 'Title is required' });
@@ -43,17 +43,19 @@ export async function POST(req: NextRequest) {
         let moduleId: number | null = null;
         let modulePrefix = '';
         if (moduleIdRaw) {
-          const mod = isNaN(Number(moduleIdRaw))
-            ? db.prepare("SELECT id, prefix FROM modules WHERE name = ? AND status = 'active'").get(String(moduleIdRaw)) as { id: number; prefix: string } | undefined
-            : db.prepare("SELECT id, prefix FROM modules WHERE id = ?").get(Number(moduleIdRaw)) as { id: number; prefix: string } | undefined;
+          const isNum = !isNaN(Number(moduleIdRaw)) && moduleIdRaw !== '';
+          const mod = isNum
+            ? db.prepare("SELECT id, prefix FROM modules WHERE id = ?").get(Number(moduleIdRaw)) as { id: number; prefix: string } | undefined
+            : db.prepare("SELECT id, prefix FROM modules WHERE name = ? AND status = 'active'").get(moduleIdRaw) as { id: number; prefix: string } | undefined;
           if (mod) { moduleId = mod.id; modulePrefix = mod.prefix; }
         }
 
         let featureId: number | null = null;
         if (featureIdRaw && moduleId) {
-          const feat = isNaN(Number(featureIdRaw))
-            ? db.prepare("SELECT id FROM features WHERE name = ? AND module_id = ? AND status = 'active'").get(String(featureIdRaw), moduleId) as { id: number } | undefined
-            : db.prepare("SELECT id FROM features WHERE id = ?").get(Number(featureIdRaw)) as { id: number } | undefined;
+          const isNum = !isNaN(Number(featureIdRaw)) && featureIdRaw !== '';
+          const feat = isNum
+            ? db.prepare("SELECT id FROM features WHERE id = ? AND module_id = ?").get(Number(featureIdRaw), moduleId) as { id: number } | undefined
+            : db.prepare("SELECT id FROM features WHERE name = ? AND module_id = ? AND status = 'active'").get(featureIdRaw, moduleId) as { id: number } | undefined;
           if (feat) featureId = feat.id;
         }
 

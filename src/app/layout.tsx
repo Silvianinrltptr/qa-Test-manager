@@ -11,7 +11,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "QA Studio",
+  title: "QAE Studio",
   description: "Test Management Workspace",
 };
 
@@ -32,7 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body className="h-full">
+      <body className="h-full" suppressHydrationWarning>
         <ToastProvider>
           {children}
         </ToastProvider>

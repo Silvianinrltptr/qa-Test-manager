@@ -5,7 +5,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { EmptyState, LoadingSpinner } from '@/components/ui/Shared';
 import { useToast } from '@/components/ui/Toast';
-import { Sparkles, Upload, FileText, AlertTriangle, Check, X, Info, Save, Trash2 } from 'lucide-react';
+import { Sparkles, Upload, FileText, AlertTriangle, Check, X, Info, Save, Trash2, Languages } from 'lucide-react';
 import type { Module, Feature, AIDraft } from '@/lib/types';
 import { TEST_TYPES, PRIORITIES } from '@/lib/types';
 
@@ -23,20 +23,24 @@ export default function AIGeneratorPage() {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sessionId] = useState(() => Math.random().toString(36).slice(2));
+  const [provider, setProvider] = useState<'gemini' | 'deepseek'>('gemini');
+  const [providerStatus, setProviderStatus] = useState<{ gemini: boolean; deepseek: boolean }>({ gemini: false, deepseek: false });
+  const [language, setLanguage] = useState<'English' | 'Bahasa Indonesia'>('English');
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [tab, setTab] = useState<'paste' | 'file'>('paste');
 
   useEffect(() => {
     fetch('/api/modules').then(r => r.json()).then(setModules);
-    // Test if AI is configured
-    fetch('/api/ai/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requirement_text: 'test', module_id: 1, feature_id: 1, session_id: 'ping' })
-    }).then(async r => {
-      const data = await r.json();
-      setIsConfigured(data.error !== 'AI_NOT_CONFIGURED');
-    }).catch(() => setIsConfigured(false));
+    fetch('/api/settings').then(r => r.json()).then(data => {
+      if (data?.ai) {
+        const geminiOk = Boolean(data.ai.gemini?.configured ?? data.ai.configured);
+        const deepseekOk = Boolean(data.ai.deepseek?.configured);
+        setProviderStatus({ gemini: geminiOk, deepseek: deepseekOk });
+        setIsConfigured(geminiOk || deepseekOk);
+      }
+    }).catch(() => {
+      setIsConfigured(false);
+    });
   }, []);
 
   const filteredFeatures = features.filter(f => f.module_id === Number(moduleId));
@@ -73,14 +77,23 @@ export default function AIGeneratorPage() {
       const res = await fetch('/api/ai/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ module_id: Number(moduleId), feature_id: Number(featureId), requirement_text: requirementText, session_id: sessionId })
+        body: JSON.stringify({
+          module_id: Number(moduleId),
+          feature_id: Number(featureId),
+          requirement_text: requirementText,
+          session_id: sessionId,
+          provider: provider,
+          language: language
+        })
       });
       const data = await res.json();
       if (res.ok) {
         setDrafts(data.drafts.map((d: AIDraft) => ({ ...d, selected: d.selected !== false })));
-        toast.success(`${data.totalGenerated} draft test case${data.totalGenerated === 1 ? '' : 's'} generated successfully`);
+        const providerName = provider === 'deepseek' ? 'DeepSeek' : 'Gemini';
+        toast.success(`${data.totalGenerated} draft test case${data.totalGenerated === 1 ? '' : 's'} generated with ${providerName}`);
       } else if (data.error === 'AI_NOT_CONFIGURED') {
-        toast.error('AI is not configured. Check the Settings page.');
+        const providerName = provider === 'deepseek' ? 'DeepSeek' : 'Gemini';
+        toast.error(`${providerName} is not configured. Check the Settings page.`);
       } else {
         toast.error(data.error || 'Failed to generate test cases');
       }
@@ -148,8 +161,8 @@ export default function AIGeneratorPage() {
         <div className="warn-box" style={{ marginBottom: 20 }}>
           <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
           <div>
-            <strong>AI is not configured.</strong> To use this feature, add <code>GEMINI_API_KEY</code> to your <code>.env.local</code> file.
-            Get a free API key at <a href="https://aistudio.google.com" target="_blank" style={{ color: 'inherit' }}>aistudio.google.com</a>.
+            <strong>No AI API keys are configured.</strong> To use this feature, configure <code>GEMINI_API_KEY</code> or <code>DEEPSEEK_API_KEY</code> in your <code>.env.local</code> file.
+            Check the <a href="/settings" style={{ color: 'inherit', textDecoration: 'underline' }}>Settings</a> page for setup instructions.
             <br />Manual test case management continues to function without AI.
           </div>
         </div>
@@ -161,6 +174,83 @@ export default function AIGeneratorPage() {
           <div style={{ fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
             <FileText size={16} style={{ color: 'var(--primary)' }} />
             Input Requirement
+          </div>
+
+          {/* AI Provider Selection */}
+          <div className="form-group" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <label className="form-label" style={{ marginBottom: 0 }}>
+                AI Provider <span className="form-required">*</span>
+              </label>
+              {providerStatus[provider] ? (
+                <span style={{ fontSize: 11, color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 500 }}>
+                  <Check size={12} /> Key Active
+                </span>
+              ) : (
+                <span style={{ fontSize: 11, color: 'var(--warning)', display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 500 }}>
+                  <AlertTriangle size={12} /> Key Missing
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button
+                type="button"
+                className={`btn ${provider === 'gemini' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  padding: '8px 12px',
+                  textAlign: 'left',
+                  height: 'auto',
+                  borderRadius: 8,
+                  border: provider === 'gemini' ? '2px solid var(--primary)' : '1px solid var(--border)',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setProvider('gemini')}
+                id="ai-provider-gemini"
+              >
+                <div style={{ fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Sparkles size={13} /> Google Gemini
+                </div>
+                <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>
+                  gemini-2.0-flash
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className={`btn ${provider === 'deepseek' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  padding: '8px 12px',
+                  textAlign: 'left',
+                  height: 'auto',
+                  borderRadius: 8,
+                  border: provider === 'deepseek' ? '2px solid var(--primary)' : '1px solid var(--border)',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setProvider('deepseek')}
+                id="ai-provider-deepseek"
+              >
+                <div style={{ fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Sparkles size={13} /> DeepSeek
+                </div>
+                <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>
+                  deepseek-chat
+                </div>
+              </button>
+            </div>
+            {!providerStatus[provider] && (
+              <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <AlertTriangle size={12} />
+                <span>
+                  {provider === 'deepseek' ? 'DEEPSEEK_API_KEY' : 'GEMINI_API_KEY'} is not configured in <code>.env.local</code>.
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Module/Feature Select */}
@@ -247,6 +337,73 @@ export default function AIGeneratorPage() {
             </div>
           )}
 
+          {/* Test Case Language Selector */}
+          <div className="form-group" style={{ marginTop: 14, marginBottom: 16 }}>
+            <label className="form-label" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Languages size={14} style={{ color: 'var(--primary)' }} />
+              Test Case Language
+            </label>
+            <div
+              id="ai-language-selector"
+              role="radiogroup"
+              aria-label="Test Case Language"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 6,
+                background: 'var(--surface-2)',
+                padding: '4px',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+              }}
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={language === 'English'}
+                onClick={() => setLanguage('English')}
+                id="lang-option-en"
+                style={{
+                  padding: '7px 12px',
+                  fontSize: '13px',
+                  fontWeight: language === 'English' ? 600 : 500,
+                  color: language === 'English' ? '#ffffff' : 'var(--foreground-muted)',
+                  background: language === 'English' ? 'var(--primary)' : 'transparent',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  textAlign: 'center',
+                  boxShadow: language === 'English' ? '0 1px 3px rgba(0,0,0,0.15)' : 'none',
+                }}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={language === 'Bahasa Indonesia'}
+                onClick={() => setLanguage('Bahasa Indonesia')}
+                id="lang-option-id"
+                style={{
+                  padding: '7px 12px',
+                  fontSize: '13px',
+                  fontWeight: language === 'Bahasa Indonesia' ? 600 : 500,
+                  color: language === 'Bahasa Indonesia' ? '#ffffff' : 'var(--foreground-muted)',
+                  background: language === 'Bahasa Indonesia' ? 'var(--primary)' : 'transparent',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  textAlign: 'center',
+                  boxShadow: language === 'Bahasa Indonesia' ? '0 1px 3px rgba(0,0,0,0.15)' : 'none',
+                }}
+              >
+                Bahasa Indonesia
+              </button>
+            </div>
+          </div>
+
           <button
             className="btn btn-primary"
             style={{ width: '100%', marginTop: 16, justifyContent: 'center' }}
@@ -255,9 +412,9 @@ export default function AIGeneratorPage() {
             id="btn-ai-generate"
           >
             {generating ? (
-              <><span className="spinner" /> Generating...</>
+              <><span className="spinner" /> Generating with {provider === 'deepseek' ? 'DeepSeek' : 'Gemini'}...</>
             ) : (
-              <><Sparkles size={14} /> Generate Test Cases</>
+              <><Sparkles size={14} /> Generate with {provider === 'deepseek' ? 'DeepSeek' : 'Gemini'}</>
             )}
           </button>
         </div>

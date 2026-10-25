@@ -15,6 +15,16 @@ interface SettingsData {
     configured: boolean;
     model: string;
     keyMasked: string | null;
+    gemini?: {
+      configured: boolean;
+      model: string;
+      keyMasked: string | null;
+    };
+    deepseek?: {
+      configured: boolean;
+      model: string;
+      keyMasked: string | null;
+    };
   };
   database: {
     path: string;
@@ -102,76 +112,121 @@ export default function SettingsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* AI Configuration Section */}
           <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 8,
-                  background: 'rgba(79,124,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'var(--primary)'
-                }}>
-                  <Sparkles size={20} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>Google Gemini AI Integration</h3>
-                  <p style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
-                    Used for automated test case generation and OCR extraction from requirement documents
-                  </p>
-                </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 8,
+                background: 'rgba(79,124,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'var(--primary)'
+              }}>
+                <Sparkles size={20} />
               </div>
-
               <div>
-                {data.ai.configured ? (
-                  <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 12px' }}>
-                    <CheckCircle2 size={14} /> Connected (Active)
-                  </span>
-                ) : (
-                  <span className="badge badge-warning" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 12px' }}>
-                    <AlertTriangle size={14} /> Not Configured
-                  </span>
-                )}
+                <h3 style={{ fontSize: 16, fontWeight: 700 }}>AI Engines & Model Configuration</h3>
+                <p style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
+                  Support for Google Gemini and DeepSeek for automated test case generation and document extraction
+                </p>
               </div>
             </div>
 
-            {data.ai.configured ? (
-              <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, fontSize: 13 }}>
-                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Google Gemini Card */}
+              <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, padding: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                   <div>
-                    <span style={{ color: 'var(--foreground-muted)' }}>AI Model: </span>
-                    <strong style={{ color: 'var(--primary-light)' }}>{data.ai.model}</strong>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--foreground-muted)' }}>API Key: </span>
-                    <code>{data.ai.keyMasked}</code>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 8, padding: 16 }}>
-                <div style={{ fontWeight: 600, color: 'var(--warning)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <AlertTriangle size={16} /> GEMINI_API_KEY Configuration Instructions:
-                </div>
-                <ol style={{ fontSize: 13, color: 'var(--foreground)', lineHeight: 1.8, paddingLeft: 20 }}>
-                  <li>
-                    Get a free API Key at{' '}
-                    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
-                      Google AI Studio (aistudio.google.com)
-                    </a>.
-                  </li>
-                  <li>
-                    Open the <code>.env.local</code> file in this project&apos;s root folder (or create one if it does not exist).
-                  </li>
-                  <li>
-                    Add the following line to the file:
-                    <div style={{ background: 'var(--surface)', padding: '6px 12px', borderRadius: 4, marginTop: 4, fontFamily: 'monospace' }}>
-                      GEMINI_API_KEY=your_gemini_api_key_here
+                    <div style={{ fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      Google Gemini AI
                     </div>
-                  </li>
-                  <li>
-                    Save the file and restart the development server. The AI Generator feature will activate automatically!
-                  </li>
-                </ol>
+                    <div style={{ fontSize: 12, color: 'var(--foreground-muted)', marginTop: 2 }}>
+                      Recommended for test cases and multimodal document parsing (Model: <code>gemini-2.0-flash</code>)
+                    </div>
+                  </div>
+                  <div>
+                    {(data.ai.gemini?.configured ?? data.ai.configured) ? (
+                      <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '5px 10px' }}>
+                        <CheckCircle2 size={13} /> Connected (Active)
+                      </span>
+                    ) : (
+                      <span className="badge badge-warning" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '5px 10px' }}>
+                        <AlertTriangle size={13} /> Not Configured
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {(data.ai.gemini?.configured ?? data.ai.configured) ? (
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 6, fontSize: 13, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                    <div>
+                      <span style={{ color: 'var(--foreground-muted)' }}>Model: </span>
+                      <strong style={{ color: 'var(--primary-light)' }}>{data.ai.gemini?.model || 'gemini-2.0-flash'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--foreground-muted)' }}>API Key: </span>
+                      <code>{data.ai.gemini?.keyMasked || data.ai.keyMasked}</code>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 6, padding: 12, fontSize: 12 }}>
+                    <div style={{ fontWeight: 600, color: 'var(--warning)', marginBottom: 6 }}>
+                      Setup Instructions for GEMINI_API_KEY:
+                    </div>
+                    <ol style={{ paddingLeft: 18, lineHeight: 1.6, margin: 0 }}>
+                      <li>Get a key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>Google AI Studio</a>.</li>
+                      <li>Add <code>GEMINI_API_KEY=your_key_here</code> to <code>.env.local</code>.</li>
+                      <li>Restart the server.</li>
+                    </ol>
+                  </div>
+                )}
               </div>
-            )}
+
+              {/* DeepSeek Card */}
+              <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, padding: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      DeepSeek AI
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--foreground-muted)', marginTop: 2 }}>
+                      High quality reasoning and code generation (Model: <code>deepseek-chat</code>)
+                    </div>
+                  </div>
+                  <div>
+                    {data.ai.deepseek?.configured ? (
+                      <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '5px 10px' }}>
+                        <CheckCircle2 size={13} /> Connected (Active)
+                      </span>
+                    ) : (
+                      <span className="badge badge-warning" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '5px 10px' }}>
+                        <AlertTriangle size={13} /> Not Configured
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {data.ai.deepseek?.configured ? (
+                  <div style={{ background: 'var(--surface)', padding: 12, borderRadius: 6, fontSize: 13, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                    <div>
+                      <span style={{ color: 'var(--foreground-muted)' }}>Model: </span>
+                      <strong style={{ color: 'var(--primary-light)' }}>{data.ai.deepseek.model}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--foreground-muted)' }}>API Key: </span>
+                      <code>{data.ai.deepseek.keyMasked}</code>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 6, padding: 12, fontSize: 12 }}>
+                    <div style={{ fontWeight: 600, color: 'var(--warning)', marginBottom: 6 }}>
+                      Setup Instructions for DEEPSEEK_API_KEY:
+                    </div>
+                    <ol style={{ paddingLeft: 18, lineHeight: 1.6, margin: 0 }}>
+                      <li>Get an API key from <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>DeepSeek Platform</a>.</li>
+                      <li>Add <code>DEEPSEEK_API_KEY=your_key_here</code> to <code>.env.local</code>.</li>
+                      <li>Restart the server.</li>
+                    </ol>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Database & Storage Section */}

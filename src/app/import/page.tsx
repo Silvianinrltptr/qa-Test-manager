@@ -33,6 +33,9 @@ const APP_FIELDS = [
   { value: 'notes', label: 'Notes' },
 ];
 
+import { parseCSV, parseXLSX } from '@/lib/import-parser';
+
+
 export default function ImportPage() {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -59,29 +62,30 @@ export default function ImportPage() {
     try {
       if (ext === 'csv') {
         const text = await file.text();
-        const lines = text.split('\n').filter(l => l.trim());
-        const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
-        const rows = lines.slice(1).map(line => {
-          const vals = line.split(',').map(v => v.replace(/^"|"$/g, '').trim());
-          return Object.fromEntries(headers.map((h, i) => [h, vals[i] || '']));
-        });
-        setFileData({ headers, rows });
-        autoMap(headers);
+        const parsed = parseCSV(text);
+        if (parsed.headers.length === 0) {
+          toast.error('The uploaded CSV file has no columns or headers.');
+          return;
+        }
+        setFileData(parsed);
+        autoMap(parsed.headers);
+        setStep(2);
+        toast.success(`File "${file.name}" processed successfully (${parsed.rows.length} test case records detected)`);
       } else {
         const XLSX = await import('xlsx');
         const buffer = await file.arrayBuffer();
-        const wb = XLSX.read(buffer, { type: 'array' });
-        const sheetName = wb.SheetNames[0];
-        const sheet = wb.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, string>[];
-        const headers = json.length > 0 ? Object.keys(json[0]) : [];
-        setFileData({ headers, rows: json.map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, String(v)]))) });
-        autoMap(headers);
+        const parsed = parseXLSX(buffer, XLSX);
+        if (parsed.headers.length === 0) {
+          toast.error('The uploaded Excel sheet has no columns or headers.');
+          return;
+        }
+        setFileData(parsed);
+        autoMap(parsed.headers);
+        setStep(2);
+        toast.success(`File "${file.name}" processed successfully (${parsed.rows.length} test case records detected)`);
       }
-      setStep(2);
-      toast.success(`File "${file.name}" processed successfully`);
-    } catch (err) {
-      toast.error('Failed to process file');
+    } catch {
+      toast.error('Failed to process file. Please ensure it follows the QA template format.');
     }
   };
 
@@ -89,15 +93,15 @@ export default function ImportPage() {
     const map: Record<string, string> = {};
     const normalize = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '');
     const lookups: Record<string, string[]> = {
-      module_id: ['module', 'modul', 'moduleid', 'modulname'],
-      feature_id: ['feature', 'fitur', 'featureid', 'featurename'],
-      title: ['title', 'judul', 'scenario', 'skenario', 'testcase', 'name'],
-      requirement_ref: ['req', 'requirement', 'reqid', 'reqref'],
-      test_type: ['testtype', 'type', 'tipe', 'jenis'],
-      preconditions: ['precondition', 'prasyarat', 'preconditions'],
-      test_steps: ['steps', 'teststeps', 'langkah', 'step'],
-      test_data: ['testdata', 'data'],
-      expected_result: ['expected', 'expectedresult', 'hasil'],
+      module_id: ['module', 'modul', 'moduleid', 'modulname', 'modulid', 'namamodul'],
+      feature_id: ['feature', 'fitur', 'featureid', 'featurename', 'fiturid', 'namafitur'],
+      title: ['title', 'judul', 'scenario', 'skenario', 'testcase', 'name', 'testcasetitle'],
+      requirement_ref: ['req', 'requirement', 'reqid', 'reqref', 'requirementref', 'referensirequirement'],
+      test_type: ['testtype', 'type', 'tipe', 'jenis', 'jenistes'],
+      preconditions: ['precondition', 'prasyarat', 'preconditions', 'kondisiawal'],
+      test_steps: ['steps', 'teststeps', 'langkah', 'step', 'langkahpengujian', 'langkahtes'],
+      test_data: ['testdata', 'data', 'datatest', 'datapengujian'],
+      expected_result: ['expected', 'expectedresult', 'hasil', 'hasildiharapkan', 'ekspektasi'],
       priority: ['priority', 'prioritas'],
       prep_status: ['prepstatus', 'status', 'prep'],
       notes: ['notes', 'catatan', 'keterangan'],
@@ -112,15 +116,16 @@ export default function ImportPage() {
 
   const generatePreview = () => {
     if (!fileData) return;
-    const rows: ImportRow[] = fileData.rows.slice(0, 100).map((row, i) => {
-      const title = fieldMap.title ? row[fieldMap.title] : '';
-      const moduleId = fieldMap.module_id ? row[fieldMap.module_id] : '';
-      const featureId = fieldMap.feature_id ? row[fieldMap.feature_id] : '';
+    // Process all parsed rows without arbitrary truncation
+    const rows: ImportRow[] = fileData.rows.map((row, i) => {
+      const title = fieldMap.title ? String(row[fieldMap.title] ?? '').trim() : '';
+      const moduleId = fieldMap.module_id ? String(row[fieldMap.module_id] ?? '').trim() : '';
+      const featureId = fieldMap.feature_id ? String(row[fieldMap.feature_id] ?? '').trim() : '';
       let status: 'valid' | 'error' = 'valid';
       let error = '';
       if (!title) { status = 'error'; error = 'Title is empty'; }
-      else if (!moduleId) { status = 'error'; error = 'Module not found'; }
-      else if (!featureId) { status = 'error'; error = 'Feature not found'; }
+      else if (!moduleId) { status = 'error'; error = 'Module is empty'; }
+      else if (!featureId) { status = 'error'; error = 'Feature is empty'; }
       return { ...row, _status: status, _error: error, _selected: status === 'valid', _rowIndex: i };
     });
     setPreview(rows);
@@ -226,9 +231,14 @@ export default function ImportPage() {
             <div style={{ fontSize: 12, color: 'var(--foreground-muted)', marginBottom: 8, fontWeight: 600 }}>
               Download template:
             </div>
-            <a href="/api/export?type=template" download className="btn btn-secondary btn-sm">
-              <Download size={12} /> Template CSV
-            </a>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <a href="/api/export?type=template" download="qa_template.csv" className="btn btn-secondary btn-sm">
+                <Download size={12} /> Template CSV
+              </a>
+              <a href="/api/export?type=template&format=xlsx" download="qa_template.xlsx" className="btn btn-secondary btn-sm">
+                <Download size={12} /> Template XLSX
+              </a>
+            </div>
           </div>
         </div>
       )}
@@ -268,9 +278,9 @@ export default function ImportPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div style={{ display: 'flex', gap: 12 }}>
               <span style={{ fontSize: 13 }}>
-                <span style={{ color: 'var(--success)' }}>{validCount} valid</span>
+                <span style={{ color: 'var(--success)', fontWeight: 600 }}>{validCount} valid</span>
                 {' · '}
-                <span style={{ color: 'var(--error)' }}>{preview.filter(r => r._status === 'error').length} error</span>
+                <span style={{ color: 'var(--error)', fontWeight: 600 }}>{preview.filter(r => r._status === 'error').length} error</span>
                 {' · '}
                 <span style={{ fontWeight: 600 }}>{selectedCount} selected</span>
               </span>
@@ -283,47 +293,110 @@ export default function ImportPage() {
               </button>
             </div>
           </div>
-          <div className="table-container">
-            <table>
+          <div className="table-container" style={{ overflowX: 'auto', maxHeight: '70vh' }}>
+            <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={{ width: 40 }}>
+                  <th style={{ width: 44, textAlign: 'center', position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' }}>
                     <input type="checkbox"
                       checked={selectedCount === validCount && validCount > 0}
-                      onChange={() => setPreview(prev => prev.map(r => ({ ...r, _selected: r._status === 'valid' ? selectedCount !== validCount : r._selected })))}
+                      onChange={() => {
+                        const shouldSelect = selectedCount !== validCount;
+                        setPreview(prev => prev.map(r => ({
+                          ...r,
+                          _selected: r._status === 'valid' ? shouldSelect : r._selected
+                        })));
+                      }}
+                      title="Select / Deselect all valid rows"
                     />
                   </th>
-                  <th>Status</th>
-                  <th>{fieldMap.title || 'Title'}</th>
-                  <th>{fieldMap.module_id || 'Module'}</th>
-                  <th>{fieldMap.feature_id || 'Feature'}</th>
-                  <th>{fieldMap.expected_result || 'Expected'}</th>
-                  <th>{fieldMap.priority || 'Priority'}</th>
+                  <th style={{ minWidth: 90, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' }}>Status</th>
+                  <th style={{ minWidth: 200, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' }}>{fieldMap.title || 'Title'}</th>
+                  <th style={{ minWidth: 90, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' }}>{fieldMap.module_id || 'Module'}</th>
+                  <th style={{ minWidth: 90, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' }}>{fieldMap.feature_id || 'Feature'}</th>
+                  <th style={{ minWidth: 120, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' }}>{fieldMap.requirement_ref || 'Requirement Ref'}</th>
+                  <th style={{ minWidth: 100, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' }}>{fieldMap.test_type || 'Test Type'}</th>
+                  <th style={{ minWidth: 180, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' }}>{fieldMap.preconditions || 'Preconditions'}</th>
+                  <th style={{ minWidth: 250, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' }}>{fieldMap.test_steps || 'Test Steps'}</th>
+                  <th style={{ minWidth: 180, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' }}>{fieldMap.test_data || 'Test Data'}</th>
+                  <th style={{ minWidth: 200, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' }}>{fieldMap.expected_result || 'Expected Result'}</th>
+                  <th style={{ minWidth: 90, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' }}>{fieldMap.priority || 'Priority'}</th>
+                  <th style={{ minWidth: 120, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' }}>{fieldMap.notes || 'Notes'}</th>
                 </tr>
               </thead>
               <tbody>
                 {preview.map((row, idx) => (
-                  <tr key={idx} style={{ opacity: !row._selected ? 0.5 : 1 }}>
-                    <td>
+                  <tr key={idx} style={{ opacity: !row._selected ? 0.55 : 1, borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ textAlign: 'center', verticalAlign: 'top', paddingTop: 12 }}>
                       <input type="checkbox" checked={row._selected || false} disabled={row._status === 'error'}
                         onChange={() => toggleRow(idx)} />
                     </td>
-                    <td>
+                    <td style={{ verticalAlign: 'top', paddingTop: 10, whiteSpace: 'nowrap' }}>
                       {row._status === 'valid' ? (
                         <span className="badge badge-active">Valid</span>
                       ) : (
                         <span className="badge badge-fail" title={row._error}>⚠ {row._error}</span>
                       )}
                     </td>
-                    <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {fieldMap.title ? String(row[fieldMap.title] ?? '') : ''}
+                    <td style={{ minWidth: 200, maxWidth: 260, verticalAlign: 'top', paddingTop: 10 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.4, maxHeight: 120, overflowY: 'auto' }}>
+                        {fieldMap.title ? String(row[fieldMap.title] ?? '') : ''}
+                      </div>
                     </td>
-                    <td>{fieldMap.module_id ? String(row[fieldMap.module_id] ?? '') : ''}</td>
-                    <td>{fieldMap.feature_id ? String(row[fieldMap.feature_id] ?? '') : ''}</td>
-                    <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {fieldMap.expected_result ? String(row[fieldMap.expected_result] ?? '') : ''}
+                    <td style={{ minWidth: 90, verticalAlign: 'top', paddingTop: 10, fontSize: 12 }}>
+                      {fieldMap.module_id ? String(row[fieldMap.module_id] ?? '') : ''}
                     </td>
-                    <td>{fieldMap.priority ? String(row[fieldMap.priority] ?? '') : ''}</td>
+                    <td style={{ minWidth: 90, verticalAlign: 'top', paddingTop: 10, fontSize: 12 }}>
+                      {fieldMap.feature_id ? String(row[fieldMap.feature_id] ?? '') : ''}
+                    </td>
+                    <td style={{ minWidth: 120, verticalAlign: 'top', paddingTop: 10, fontSize: 12 }}>
+                      {fieldMap.requirement_ref ? String(row[fieldMap.requirement_ref] ?? '') : '-'}
+                    </td>
+                    <td style={{ minWidth: 100, verticalAlign: 'top', paddingTop: 10, fontSize: 12 }}>
+                      {fieldMap.test_type ? String(row[fieldMap.test_type] ?? '') : '-'}
+                    </td>
+                    <td style={{ minWidth: 180, maxWidth: 240, verticalAlign: 'top', paddingTop: 10 }}>
+                      <div style={{ whiteSpace: 'pre-wrap', maxHeight: 120, overflowY: 'auto', fontSize: 12, lineHeight: 1.45 }}>
+                        {fieldMap.preconditions ? String(row[fieldMap.preconditions] ?? '') : '-'}
+                      </div>
+                    </td>
+                    <td style={{ minWidth: 250, maxWidth: 340, verticalAlign: 'top', paddingTop: 10 }}>
+                      <div style={{
+                        whiteSpace: 'pre-wrap',
+                        maxHeight: 120,
+                        overflowY: 'auto',
+                        fontSize: 12,
+                        lineHeight: 1.45,
+                        background: 'var(--surface-2)',
+                        padding: '6px 8px',
+                        borderRadius: 6,
+                        border: '1px solid var(--border)'
+                      }}>
+                        {fieldMap.test_steps ? String(row[fieldMap.test_steps] ?? '') : '-'}
+                      </div>
+                    </td>
+                    <td style={{ minWidth: 180, maxWidth: 240, verticalAlign: 'top', paddingTop: 10 }}>
+                      <div style={{ whiteSpace: 'pre-wrap', maxHeight: 120, overflowY: 'auto', fontSize: 12, lineHeight: 1.45 }}>
+                        {fieldMap.test_data ? String(row[fieldMap.test_data] ?? '') : '-'}
+                      </div>
+                    </td>
+                    <td style={{ minWidth: 200, maxWidth: 260, verticalAlign: 'top', paddingTop: 10 }}>
+                      <div style={{ whiteSpace: 'pre-wrap', maxHeight: 120, overflowY: 'auto', fontSize: 12, lineHeight: 1.45 }}>
+                        {fieldMap.expected_result ? String(row[fieldMap.expected_result] ?? '') : '-'}
+                      </div>
+                    </td>
+                    <td style={{ minWidth: 90, verticalAlign: 'top', paddingTop: 10, fontSize: 12 }}>
+                      {fieldMap.priority && row[fieldMap.priority] ? (
+                        <span className={`badge badge-${String(row[fieldMap.priority] ?? '').toLowerCase() === 'high' || String(row[fieldMap.priority] ?? '').toLowerCase() === 'critical' ? 'critical' : 'medium'}`}>
+                          {String(row[fieldMap.priority] ?? '')}
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td style={{ minWidth: 120, maxWidth: 180, verticalAlign: 'top', paddingTop: 10, fontSize: 12 }}>
+                      <div style={{ maxHeight: 120, overflowY: 'auto', lineHeight: 1.4 }}>
+                        {fieldMap.notes ? String(row[fieldMap.notes] ?? '') : '-'}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

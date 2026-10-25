@@ -17,17 +17,35 @@ export async function GET(req: NextRequest) {
     const lifecycle = searchParams.get('lifecycle') ?? 'active';
 
     if (type === 'template') {
-      // Return CSV template
+      const format = searchParams.get('format')?.toLowerCase();
       const headers = [
         'Module ID', 'Feature ID', 'Requirement Ref', 'Title', 'Test Type',
         'Preconditions', 'Test Steps', 'Test Data', 'Expected Result', 'Priority', 'Notes'
-      ].join(',');
+      ];
       const example = [
         '1', '1', 'REQ-001', 'Successful login with valid credentials', 'functional',
         'User is on the login page', '1. Open login page\n2. Enter username\n3. Enter password\n4. Click Login',
         'username: admin, password: Pass123!', 'User successfully logs in and is redirected to dashboard', 'high', ''
-      ].map(v => `"${v}"`).join(',');
-      const csv = headers + '\n' + example;
+      ];
+
+      if (format === 'xlsx') {
+        const XLSX = await import('xlsx');
+        const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Template');
+        const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+        return new NextResponse(buf, {
+          headers: {
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition': 'attachment; filename="qa_template.xlsx"'
+          }
+        });
+      }
+
+      // Return CSV template (standard RFC-4180 with proper quote escaping)
+      const csvHeaders = headers.join(',');
+      const csvExample = example.map(v => `"${v.replace(/"/g, '""')}"`).join(',');
+      const csv = csvHeaders + '\n' + csvExample;
 
       return new NextResponse(csv, {
         headers: {

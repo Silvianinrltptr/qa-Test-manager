@@ -12,7 +12,8 @@ export async function GET(req: NextRequest) {
     if (errorResponse) return errorResponse;
 
     const db = getDb();
-    const apiKey = process.env.GEMINI_API_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY;
+    const deepseekKey = process.env.DEEPSEEK_API_KEY;
 
     // Database counts
     const moduleCount = (db.prepare('SELECT COUNT(*) as c FROM modules').get() as { c: number }).c;
@@ -30,9 +31,19 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ai: {
-        configured: Boolean(apiKey && apiKey.trim().length > 0),
-        model: 'gemini-2.0-flash',
-        keyMasked: apiKey ? `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}` : null,
+        configured: Boolean((geminiKey && geminiKey.trim().length > 0) || (deepseekKey && deepseekKey.trim().length > 0)),
+        model: 'gemini-2.0-flash / deepseek-chat',
+        keyMasked: geminiKey ? `${geminiKey.slice(0, 4)}...${geminiKey.slice(-4)}` : (deepseekKey ? `${deepseekKey.slice(0, 4)}...${deepseekKey.slice(-4)}` : null),
+        gemini: {
+          configured: Boolean(geminiKey && geminiKey.trim().length > 0),
+          model: 'gemini-2.0-flash',
+          keyMasked: geminiKey ? `${geminiKey.slice(0, 4)}...${geminiKey.slice(-4)}` : null,
+        },
+        deepseek: {
+          configured: Boolean(deepseekKey && deepseekKey.trim().length > 0),
+          model: 'deepseek-chat',
+          keyMasked: deepseekKey ? `${deepseekKey.slice(0, 4)}...${deepseekKey.slice(-4)}` : null,
+        },
       },
       database: {
         path: dbPath,

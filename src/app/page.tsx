@@ -7,6 +7,70 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 
+function QAERibbonLogo({ size = 140, className = '' }: { size?: number; className?: string }) {
+  const height = Math.round(size * (89 / 88));
+  return (
+    <svg
+      width={size}
+      height={height}
+      viewBox="12 13 88 89"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-label="QAE Studio Ribbon Logo"
+      style={{ display: 'block', overflow: 'visible' }}
+    >
+      <defs>
+        {/* Main Ribbon Body: Deep Plum to Rich Mauve (Forms Q Loop & E Spine/Tiers) */}
+        <linearGradient id="qae_ribbon_main" x1="20" y1="15" x2="70" y2="85" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#9E6983" />
+          <stop offset="50%" stopColor="#73445C" />
+          <stop offset="100%" stopColor="#4F2B3E" />
+        </linearGradient>
+
+        {/* Right Ribbon Leg: Mauve to Deep Plum (Forms the Apex and Right Leg of A) */}
+        <linearGradient id="qae_ribbon_leg" x1="45" y1="15" x2="105" y2="85" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#B27F99" />
+          <stop offset="60%" stopColor="#895571" />
+          <stop offset="100%" stopColor="#5E334B" />
+        </linearGradient>
+
+        {/* Option 1 Signature Folded Ribbon: Luminous Lavender-Pink to Rose Mauve (Q Tail & Base Accent) */}
+        <linearGradient id="qae_ribbon_fold" x1="30" y1="60" x2="85" y2="95" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#EDB8D1" />
+          <stop offset="50%" stopColor="#CB96B1" />
+          <stop offset="100%" stopColor="#9C6B84" />
+        </linearGradient>
+      </defs>
+
+      {/* Part 1: Outer Q Loop & The 3 Horizontal Tiers and Spine of E */}
+      <path
+        d="M 52 16 C 55 16 57 17.5 58 20 L 46 32 C 45 33 43.5 33.5 42 33.5 L 34 33.5 C 31 33.5 28.5 36 28.5 39 L 28.5 46 L 48 46 C 50.5 46 52 47.5 52 50 L 52 52 C 52 54.5 50.5 56 48 56 L 28.5 56 L 28.5 65 C 28.5 68 31 70.5 34 70.5 L 56 70.5 C 58 70.5 60 72 61 74 L 66 82 C 64 83.5 61 84 57 84 L 32 84 C 20 84 14 76 14 65 L 14 35 C 14 24 20 16 32 16 L 52 16 Z"
+        fill="url(#qae_ribbon_main)"
+      />
+
+      {/* Part 2: The A (Ascending diagonal, apex, and right leg) */}
+      <path
+        d="M 58 18 C 61 14.5 66 14.5 69 18 L 96 66 C 98.5 70 98 75 94.5 78 L 88 83 C 84.5 85.5 80 84.5 77.5 81 L 63 56 L 53 40 L 58 18 Z"
+        fill="url(#qae_ribbon_leg)"
+      />
+
+      {/* Part 3: Option 1 Signature Overlapping Ribbon Fold (Forms Q Tail & connects base) */}
+      <path
+        d="M 38 65 C 41 62 46 62 49 64 L 76 80 C 79.5 82 81 86.5 79 90 L 75.5 96 C 73.5 99.5 69 101 65.5 99 L 44 86 C 41 84 39.5 80 41 76.5 L 43 72 C 44 70 43.5 67.5 41.5 66.5 L 38 65 Z"
+        fill="url(#qae_ribbon_fold)"
+      />
+
+      {/* Part 4: Inner crossbar fold connecting the letters (Center bar of E & Crossbar of A) */}
+      <path
+        d="M 44 48 L 74 48 C 76.5 48 78 50 77 52.5 L 75 56 C 74 58 72 59 70 59 L 40 59 C 38 59 36.5 57.5 37 55.5 L 38 52 C 39 49.5 41.5 48 44 48 Z"
+        fill="url(#qae_ribbon_fold)"
+        opacity="0.92"
+      />
+    </svg>
+  );
+}
+
 export default function LandingPortalPage() {
   const router = useRouter();
   const toast = useToast();
@@ -107,21 +171,13 @@ export default function LandingPortalPage() {
         <div style={{ marginBottom: 44 }}>
           <div
             style={{
-              width: 50,
-              height: 50,
-              borderRadius: 12,
-              background: 'var(--primary)',
-              color: '#FFFFFF',
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 24,
-              fontWeight: 700,
-              marginBottom: 16,
-              boxShadow: 'var(--shadow-sm)',
+              marginBottom: 2,
             }}
           >
-            ⬡
+            <QAERibbonLogo size={140} />
           </div>
           <h1
             style={{
@@ -132,7 +188,7 @@ export default function LandingPortalPage() {
               color: 'var(--foreground)',
             }}
           >
-            QA Studio
+            QAE Studio
           </h1>
           <p
             style={{
@@ -320,7 +376,7 @@ export default function LandingPortalPage() {
             color: 'var(--foreground-dim)',
           }}
         >
-          QA Studio · Personal Test Management Workspace
+          QAE Studio · Personal Test Management Workspace
         </footer>
       </main>
 

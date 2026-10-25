@@ -351,7 +351,7 @@ export default function FeedbackInboxPage() {
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 11, color: 'var(--foreground-muted)' }}>
-                      <span style={{ fontWeight: 600, color: 'var(--primary)' }}>QA Studio Response:</span>
+                      <span style={{ fontWeight: 600, color: 'var(--primary)' }}>QAE Studio Response:</span>
                       {item.replied_at && <span>{new Date(item.replied_at).toLocaleString('en-US')}</span>}
                     </div>
                     <div style={{ color: 'var(--foreground)', whiteSpace: 'pre-wrap' }}>{item.reply}</div>

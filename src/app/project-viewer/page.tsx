@@ -234,7 +234,7 @@ export default function ProjectViewerPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--foreground)' }}>
-                QA Studio · Project Viewer
+                QAE Studio · Project Viewer
               </div>
               <div style={{ fontSize: 11, color: 'var(--foreground-muted)' }}>
                 Collaborator Portal (PM & Developer View)
@@ -377,7 +377,7 @@ export default function ProjectViewerPage() {
                 title="No Test Cases Found"
                 description={
                   totalCases === 0
-                    ? "No test cases are currently created in QA Studio."
+                    ? "No test cases are currently created in QAE Studio."
                     : "No test cases match your active filter criteria."
                 }
               />
@@ -691,7 +691,7 @@ export default function ProjectViewerPage() {
                           }}
                         >
                           <div style={{ fontWeight: 600, color: 'var(--primary)', marginBottom: 2 }}>
-                            QA Studio Response:
+                            QAE Studio Response:
                           </div>
                           <div style={{ color: 'var(--foreground)', whiteSpace: 'pre-wrap' }}>
                             {comment.reply}
