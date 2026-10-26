@@ -8,9 +8,12 @@ import { useToast } from '@/components/ui/Toast';
 import { Sparkles, Upload, FileText, AlertTriangle, Check, X, Info, Save, Trash2, Languages } from 'lucide-react';
 import type { Module, Feature, AIDraft } from '@/lib/types';
 import { TEST_TYPES, PRIORITIES } from '@/lib/types';
+import { useI18n } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 export default function AIGeneratorPage() {
   const toast = useToast();
+  const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   const [modules, setModules] = useState<Module[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
@@ -157,11 +160,12 @@ export default function AIGeneratorPage() {
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Sparkles size={22} style={{ color: 'var(--accent)' }} />
-            AI Test Case Generator
+            {t('aiGenerator.title', 'AI Test Case Generator')}
           </h1>
-          <p className="page-subtitle">Generate test case drafts from requirements using AI</p>
+          <p className="page-subtitle">{t('aiGenerator.subtitle', 'Generate test case drafts from requirements using AI')}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>

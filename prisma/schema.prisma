@@ -115,6 +115,7 @@ model TestCase {
   feature         Feature           @relation(fields: [featureId], references: [id], onDelete: Cascade)
   executions      Execution[]
   comments        TestCaseComment[]
+  translations    TestCaseTranslation[]
 
   @@map("test_cases")
 }
@@ -236,3 +237,39 @@ model TestCaseComment {
 
   @@map("test_case_comments")
 }
+
+// -------------------------------------------------------------
+// User Preferences (Language, Theme)
+// -------------------------------------------------------------
+model UserPreference {
+  id        Int      @id @default(autoincrement())
+  userKey   String   @unique @map("user_key")
+  language  String   @default("en")
+  theme     String?  @default("light")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("user_preferences")
+}
+
+// -------------------------------------------------------------
+// Test Case Translations (Bilingual Support EN / IDN)
+// -------------------------------------------------------------
+model TestCaseTranslation {
+  id             Int       @id @default(autoincrement())
+  testCaseId     Int       @map("test_case_id")
+  language       String    // 'id' or 'en'
+  title          String?
+  preconditions  String?
+  testSteps      String?   @map("test_steps")
+  testData       String?   @map("test_data")
+  expectedResult String?   @map("expected_result")
+  reviewed       Boolean   @default(false)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  testCase       TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@unique([testCaseId, language])
+  @@map("test_case_translations")
+}
+

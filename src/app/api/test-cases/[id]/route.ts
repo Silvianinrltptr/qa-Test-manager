@@ -1,6 +1,7 @@
 import { getDb, logActivity, logChange } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { resolveTestCaseLanguageContent, isIndonesianText, translateTestCase } from '@/lib/translation';
 
 export async function GET(req: NextRequest, ctx: RouteContext<'/api/test-cases/[id]'>) {
   try {
@@ -9,16 +10,31 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/api/test-cases/[
 
     const db = getDb();
     const { id } = await ctx.params;
+    const { searchParams } = new URL(req.url);
+    const lang = searchParams.get('lang') || req.cookies.get('qastudio_lang')?.value || 'en';
 
-    const tc = await db.prepare(`
+    const tc = (await db.prepare(`
       SELECT tc.*, m.name as module_name, m.prefix as module_prefix, f.name as feature_name
       FROM test_cases tc
       JOIN modules m ON m.id = tc.module_id
       JOIN features f ON f.id = tc.feature_id
       WHERE tc.id = ?
-    `).get(Number(id));
+    `).get(Number(id))) as any;
 
     if (!tc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    const translations = (await db.prepare(`
+      SELECT * FROM test_case_translations WHERE test_case_id = ? ORDER BY language ASC
+    `).all(Number(id))) as any[];
+
+    const resolved = resolveTestCaseLanguageContent(tc, translations, lang);
+
+    const testCase = {
+      ...tc,
+      ...resolved,
+      translation_id: translations.find((t: any) => t.language === resolved.display_language)?.id,
+      translation_lang: resolved.display_language,
+    };
 
     const executions = await db.prepare(`
       SELECT * FROM executions WHERE test_case_id = ? ORDER BY exec_date DESC
@@ -32,7 +48,13 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/api/test-cases/[
       SELECT * FROM test_case_comments WHERE test_case_id = ? ORDER BY created_at ASC
     `).all(Number(id));
 
-    return NextResponse.json({ testCase: tc, executions: executions || [], changes: changes || [], comments: comments || [] });
+    return NextResponse.json({
+      testCase,
+      translations: translations || [],
+      executions: executions || [],
+      changes: changes || [],
+      comments: comments || []
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -100,6 +122,73 @@ export async function PUT(req: NextRequest, ctx: RouteContext<'/api/test-cases/[
         changeType: 'updated', changedFields: changedFields.join(', '),
         oldValues: oldVals, newValues: newVals, reason: body.reason
       });
+    }
+
+    // If content fields changed, synchronize translations and mark for review
+    const contentFieldsChanged = ['title', 'preconditions', 'test_steps', 'test_data', 'expected_result'].some(f => changedFields.includes(f));
+    if (contentFieldsChanged) {
+      try {
+        const activeTitle = ((body.title ?? old.title) || '') as string;
+        const isId = isIndonesianText(activeTitle);
+        const sourceLang = isId ? 'id' : 'en';
+        const targetLang = isId ? 'en' : 'id';
+
+        // 1. Update source language translation as reviewed
+        await db.prepare(`
+          INSERT INTO test_case_translations (test_case_id, language, title, preconditions, test_steps, test_data, expected_result, reviewed, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, true, NOW())
+          ON CONFLICT (test_case_id, language) DO UPDATE SET
+            title = EXCLUDED.title,
+            preconditions = EXCLUDED.preconditions,
+            test_steps = EXCLUDED.test_steps,
+            test_data = EXCLUDED.test_data,
+            expected_result = EXCLUDED.expected_result,
+            reviewed = true,
+            updated_at = NOW()
+        `).run(
+          Number(id), sourceLang,
+          body.title ?? old.title,
+          body.preconditions ?? old.preconditions,
+          body.test_steps ?? old.test_steps,
+          body.test_data ?? old.test_data,
+          body.expected_result ?? old.expected_result
+        );
+
+        // 2. Auto-translate to target language if AI service is configured
+        if (process.env.DEEPSEEK_API_KEY || process.env.GEMINI_API_KEY) {
+          const transRes = await translateTestCase({
+            title: (body.title ?? old.title) as string,
+            preconditions: (body.preconditions ?? old.preconditions) as string,
+            test_steps: (body.test_steps ?? old.test_steps) as string,
+            test_data: (body.test_data ?? old.test_data) as string,
+            expected_result: (body.expected_result ?? old.expected_result) as string,
+          }, targetLang);
+
+          if (transRes.success && transRes.translated) {
+            await db.prepare(`
+              INSERT INTO test_case_translations (test_case_id, language, title, preconditions, test_steps, test_data, expected_result, reviewed, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, false, NOW())
+              ON CONFLICT (test_case_id, language) DO UPDATE SET
+                title = EXCLUDED.title,
+                preconditions = EXCLUDED.preconditions,
+                test_steps = EXCLUDED.test_steps,
+                test_data = EXCLUDED.test_data,
+                expected_result = EXCLUDED.expected_result,
+                reviewed = false,
+                updated_at = NOW()
+            `).run(
+              Number(id), targetLang,
+              transRes.translated.title,
+              transRes.translated.preconditions || null,
+              transRes.translated.test_steps || null,
+              transRes.translated.test_data || null,
+              transRes.translated.expected_result || null
+            );
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to update translations on TC update:', err);
+      }
     }
 
     await logActivity(db, 'updated', 'test_case', Number(id), old.case_id as string, `Test case "${old.title}" updated`);

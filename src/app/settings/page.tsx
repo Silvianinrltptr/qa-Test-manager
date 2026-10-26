@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { LoadingSpinner } from '@/components/ui/Shared';
 import { useToast } from '@/components/ui/Toast';
+import { useI18n } from '@/lib/i18n/context';
 import {
   Settings, Database, Sparkles, Key, CheckCircle2,
-  AlertTriangle, HardDrive, Download, RefreshCw, Layers
+  AlertTriangle, HardDrive, Download, RefreshCw, Layers, Globe
 } from 'lucide-react';
 
 interface SettingsData {
@@ -42,6 +44,7 @@ interface SettingsData {
 }
 
 export default function SettingsPage() {
+  const { t, locale, setLanguage } = useI18n();
   const toast = useToast();
   const [data, setData] = useState<SettingsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,16 +93,17 @@ export default function SettingsPage() {
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Settings size={20} style={{ color: 'var(--primary)' }} />
-            Settings & System Configuration
+            {t('settings.title', 'Settings & System Configuration')}
           </h1>
           <p className="page-subtitle">
-            AI integration status, local SQLite database storage, and data maintenance
+            {t('settings.subtitle', 'Configure AI providers, database connections, and workspace options')}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-secondary" onClick={fetchSettings}>
-            <RefreshCw size={14} /> Refresh Status
+            <RefreshCw size={14} /> {t('common.refresh', 'Refresh')}
           </button>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>
@@ -107,9 +111,36 @@ export default function SettingsPage() {
       {loading ? (
         <LoadingSpinner size="lg" />
       ) : !data ? (
-        <div className="card">Failed to load system status</div>
+        <div className="card">{t('common.noData', 'Failed to load system status')}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* Language Preference Section */}
+          <div className="card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 8,
+                background: 'rgba(79,124,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'var(--primary)'
+              }}>
+                <Globe size={20} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700 }}>{t('settings.languagePreference', 'Language Preference')}</h3>
+                <p style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
+                  {t('settings.languageDesc', 'Choose your default workspace interface language (English or Bahasa Indonesia)')}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, background: 'var(--surface-2)', padding: '16px 20px', borderRadius: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{t('settings.languagePreference', 'Interface Language')}:</div>
+              <LanguageSwitcher />
+              <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
+                {locale === 'en' ? 'Currently using English (US)' : 'Saat ini menggunakan Bahasa Indonesia'}
+              </div>
+            </div>
+          </div>
+
           {/* AI Configuration Section */}
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>

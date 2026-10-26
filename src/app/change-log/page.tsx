@@ -5,10 +5,13 @@ import { AppShell } from '@/components/layout/AppShell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner, EmptyState, Pagination } from '@/components/ui/Shared';
-import { History, Search, Filter, Eye, GitCommit, ArrowRight, Clock } from 'lucide-react';
+import { History, Search, Filter, Eye, GitCommit, ArrowRight, Clock, Download } from 'lucide-react';
 import type { ChangeLog } from '@/lib/types';
+import { useI18n } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 export default function ChangeLogPage() {
+  const { t } = useI18n();
   const [logs, setLogs] = useState<ChangeLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 25, totalPages: 1 });
@@ -52,13 +55,20 @@ export default function ChangeLogPage() {
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <History size={20} style={{ color: 'var(--primary)' }} />
-            Audit & Change Log
+            {t('changeLog.title', 'Audit & Change Log')}
           </h1>
           <p className="page-subtitle">
-            Complete historical audit log of changes to test cases, requirements, modules, and testing statuses
+            {t('changeLog.subtitle', 'Complete historical audit log of changes to test cases, requirements, modules, and testing statuses')}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <a href="/api/export?type=change-log" download="change_log.csv" className="btn btn-secondary">
+            <Download size={14} /> CSV
+          </a>
+          <a href="/api/export?type=change-log&format=xlsx" download="change_log.xlsx" className="btn btn-secondary">
+            <Download size={14} /> Excel (.xlsx)
+          </a>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>

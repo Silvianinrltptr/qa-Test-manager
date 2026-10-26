@@ -7,9 +7,12 @@ import { ResultBadge, LoadingSpinner, EmptyState, Pagination } from '@/component
 import { useToast } from '@/components/ui/Toast';
 import { Play, Download, Search } from 'lucide-react';
 import type { TestCase, Module, Feature, Execution } from '@/lib/types';
+import { useI18n } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 export default function ExecutionPage() {
   const toast = useToast();
+  const { t, locale } = useI18n();
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
@@ -25,6 +28,7 @@ export default function ExecutionPage() {
     const params = new URLSearchParams({
       page: String(page), limit: '20', prepStatus: filters.prepStatus || '',
       lifecycle: 'active',
+      lang: locale,
       ...(filters.moduleId && { moduleId: filters.moduleId }),
       ...(filters.featureId && { featureId: filters.featureId }),
       ...(filters.search && { search: filters.search }),
@@ -50,7 +54,7 @@ export default function ExecutionPage() {
       .catch(() => setFeatures([]));
   }, []);
 
-  useEffect(() => { fetchData(1); }, [filters]);
+  useEffect(() => { fetchData(1); }, [filters, locale]);
 
   const safeFeatures = Array.isArray(features) ? features : [];
   const filteredFeatures = safeFeatures.filter(f => !filters.moduleId || f.module_id === Number(filters.moduleId));
@@ -83,14 +87,18 @@ export default function ExecutionPage() {
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Play size={20} style={{ color: 'var(--success)' }} />
-            Test Execution
+            {t('execution.title', 'Test Execution')}
           </h1>
-          <p className="page-subtitle">Record test case execution results</p>
+          <p className="page-subtitle">{t('execution.subtitle', 'Record test case execution results')}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button className="btn btn-secondary" onClick={() => window.open('/api/export?type=executions')}>
-            <Download size={14} /> Export Results
-          </button>
+          <a href="/api/export?type=executions" download="executions.csv" className="btn btn-secondary">
+            <Download size={14} /> CSV
+          </a>
+          <a href="/api/export?type=executions&format=xlsx" download="executions.xlsx" className="btn btn-secondary">
+            <Download size={14} /> Excel (.xlsx)
+          </a>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>
@@ -100,22 +108,22 @@ export default function ExecutionPage() {
         <div className="filters-bar">
           <div className="search-bar" style={{ flex: 1, minWidth: 180 }}>
             <Search size={14} className="search-icon" />
-            <input className="form-control" placeholder="Search test cases..." value={filters.search}
+            <input className="form-control" placeholder={t('common.search', 'Search test cases...')} value={filters.search}
               onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} />
           </div>
           <select className="form-control" style={{ width: 160 }} value={filters.moduleId}
             onChange={e => setFilters(p => ({ ...p, moduleId: e.target.value, featureId: '' }))}>
-            <option value="">All Modules</option>
+            <option value="">{t('common.all', 'All Modules')}</option>
             {modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
           <select className="form-control" style={{ width: 160 }} value={filters.featureId}
             onChange={e => setFilters(p => ({ ...p, featureId: e.target.value }))}>
-            <option value="">All Features</option>
+            <option value="">{t('common.all', 'All Features')}</option>
             {filteredFeatures.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
           <select className="form-control" style={{ width: 160 }} value={filters.prepStatus}
             onChange={e => setFilters(p => ({ ...p, prepStatus: e.target.value }))}>
-            <option value="">All Prep Statuses</option>
+            <option value="">{t('common.all', 'All Prep Statuses')}</option>
             <option value="ready">Ready for Execution</option>
             <option value="in_progress">In Progress</option>
             <option value="draft">Draft</option>
@@ -129,8 +137,8 @@ export default function ExecutionPage() {
           {loading ? <LoadingSpinner /> : testCases.length === 0 ? (
             <EmptyState
               icon={<Play size={28} />}
-              title="No test cases found"
-              description="Change filters or mark test cases as 'Ready for Execution'"
+              title={t('common.noData', 'No test cases found')}
+              description={t('execution.noCasesReady', "Change filters or mark test cases as 'Ready for Execution'")}
             />
           ) : (
             <>

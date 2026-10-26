@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
+import { I18nProvider } from "@/lib/i18n/context";
 import React from "react";
 
 const inter = Inter({
@@ -34,7 +35,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="h-full" suppressHydrationWarning>
         <ToastProvider>
-          {children}
+          <I18nProvider>
+            {children}
+          </I18nProvider>
         </ToastProvider>
       </body>
     </html>

@@ -7,6 +7,8 @@ import { useToast } from '@/components/ui/Toast';
 import { Upload, Download, Check, X, AlertTriangle, ArrowRight, Save } from 'lucide-react';
 import type { Module } from '@/lib/types';
 import { useEffect } from 'react';
+import { useI18n } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 interface ImportSaveResponse {
   results: { rowIndex: number; status: string; caseId?: string; error?: string }[];
@@ -38,6 +40,7 @@ import { parseCSV, parseXLSX } from '@/lib/import-parser';
 
 export default function ImportPage() {
   const toast = useToast();
+  const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [fileData, setFileData] = useState<{ headers: string[]; rows: Record<string, string>[] } | null>(null);
@@ -175,13 +178,17 @@ export default function ImportPage() {
     <AppShell>
       <header className="page-header main-header">
         <div>
-          <h1 className="page-title">Import Excel / CSV</h1>
-          <p className="page-subtitle">Import test cases from Excel or CSV files with validation and preview</p>
+          <h1 className="page-title">{t('importExport.title', 'Import Excel / CSV')}</h1>
+          <p className="page-subtitle">{t('importExport.subtitle', 'Import test cases from Excel or CSV files with validation and preview')}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <a href="/api/export?type=template" className="btn btn-secondary" download>
-            <Download size={14} /> Download Template
+          <a href="/api/export?type=template" className="btn btn-secondary" download="qa_template.csv" title="CSV Template">
+            <Download size={14} /> CSV Template
           </a>
+          <a href="/api/export?type=template&format=xlsx" className="btn btn-secondary" download="qa_template.xlsx" title="Excel Template">
+            <Download size={14} /> Excel (.xlsx)
+          </a>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>
@@ -189,10 +196,10 @@ export default function ImportPage() {
       {/* Stepper */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 24 }}>
         {[
-          { n: 1, label: 'Upload File' },
-          { n: 2, label: 'Column Mapping' },
-          { n: 3, label: 'Preview & Validation' },
-          { n: 4, label: 'Complete' },
+          { n: 1, label: t('importExport.uploadStep', 'Upload File') },
+          { n: 2, label: t('importExport.mappingStep', 'Column Mapping') },
+          { n: 3, label: t('importExport.previewStep', 'Preview & Validation') },
+          { n: 4, label: t('importExport.completeStep', 'Complete') },
         ].map((s, i, arr) => (
           <div key={s.n} style={{ display: 'flex', alignItems: 'center', flex: i < arr.length - 1 ? 1 : undefined }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

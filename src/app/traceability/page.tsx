@@ -7,6 +7,8 @@ import { ResultBadge, PriorityBadge, LoadingSpinner, EmptyState, ProgressBar } f
 import { Network, CheckCircle2, AlertTriangle, XCircle, Search, Layers, Sparkles, ExternalLink, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import type { Module, TestResult, Priority, TestType } from '@/lib/types';
+import { useI18n } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 interface TraceabilityExecution {
   id: number;
@@ -67,6 +69,7 @@ interface TraceabilityStats {
 }
 
 export default function TraceabilityPage() {
+  const { t } = useI18n();
   const [matrix, setMatrix] = useState<TraceabilityModule[]>([]);
   const [stats, setStats] = useState<TraceabilityStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,16 +110,17 @@ export default function TraceabilityPage() {
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Network size={20} style={{ color: 'var(--primary)' }} />
-            Traceability Matrix
+            {t('traceability.title', 'Traceability Matrix')}
           </h1>
           <p className="page-subtitle">
-            End-to-end trace: Module → Feature → Requirement → Test Case → Execution History
+            {t('traceability.subtitle', 'End-to-end trace: Module → Feature → Requirement → Test Case → Execution History')}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-secondary" onClick={fetchTraceability}>
-            <RefreshCw size={14} /> Refresh
+            <RefreshCw size={14} /> {t('common.refresh', 'Refresh')}
           </button>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>

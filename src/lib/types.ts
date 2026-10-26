@@ -61,6 +61,16 @@ export interface TestCase {
   feature_name?: string;
   module_prefix?: string;
   comment_count?: number;
+  has_translation?: boolean;
+  translation_reviewed?: boolean;
+  translation_lang?: string | null;
+  original_title?: string;
+  original_preconditions?: string | null;
+  original_test_steps?: string | null;
+  original_test_data?: string | null;
+  original_expected_result?: string | null;
+  source_language?: 'id' | 'en';
+  display_language?: 'id' | 'en';
 }
 
 export interface Execution {

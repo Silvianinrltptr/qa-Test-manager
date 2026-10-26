@@ -8,6 +8,8 @@ import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { BarChart3, Camera, Download } from 'lucide-react';
 import type { WeeklySnapshot, TestResult } from '@/lib/types';
+import { useI18n } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 interface WeeklySnapshotData {
   totalActive?: number;
@@ -26,6 +28,7 @@ interface WeeklySnapshotData {
 
 export default function WeeklyProgressPage() {
   const toast = useToast();
+  const { t } = useI18n();
   const [snapshots, setSnapshots] = useState<WeeklySnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -96,17 +99,18 @@ export default function WeeklyProgressPage() {
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <BarChart3 size={20} style={{ color: 'var(--primary)' }} />
-            Weekly Progress
+            {t('weeklyProgress.title', 'Weekly Progress')}
           </h1>
-          <p className="page-subtitle">Historical weekly QA progress snapshots</p>
+          <p className="page-subtitle">{t('weeklyProgress.subtitle', 'Historical weekly QA progress snapshots')}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-secondary" onClick={() => window.open('/api/export?type=change-log')}>
-            <Download size={14} /> Export
+            <Download size={14} /> {t('common.export', 'Export')}
           </button>
           <button className="btn btn-primary" onClick={() => setShowModal(true)} id="btn-create-snapshot">
-            <Camera size={14} /> Take Snapshot
+            <Camera size={14} /> {t('weeklyProgress.takeSnapshot', 'Take Snapshot')}
           </button>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>

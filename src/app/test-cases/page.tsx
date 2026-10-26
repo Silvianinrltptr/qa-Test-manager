@@ -6,9 +6,11 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { ResultBadge, PriorityBadge, PrepBadge, LifecycleBadge, TypeBadge, EmptyState, LoadingSpinner, Pagination } from '@/components/ui/Shared';
 import { useToast } from '@/components/ui/Toast';
-import { Plus, Search, Filter, Download, Edit2, Eye, Trash2, ClipboardList, SortAsc, SortDesc, ChevronDown, X, Play, RotateCcw } from 'lucide-react';
+import { Plus, Search, Filter, Download, Edit2, Eye, Trash2, ClipboardList, SortAsc, SortDesc, ChevronDown, X, Play, RotateCcw, Globe } from 'lucide-react';
 import type { TestCase, Module, Feature, Execution, TestCaseComment } from '@/lib/types';
 import { TEST_TYPES, PRIORITIES, PREP_STATUSES, LIFECYCLE_STATUSES } from '@/lib/types';
+import { useI18n } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 interface TestCaseDetail {
   testCase?: TestCase;
@@ -31,6 +33,7 @@ const EXEC_RESULTS = [
 
 export default function TestCasesPage() {
   const toast = useToast();
+  const { t, locale } = useI18n();
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
@@ -43,6 +46,7 @@ export default function TestCasesPage() {
   const [deleteTarget, setDeleteTarget] = useState<TestCase | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [translating, setTranslating] = useState(false);
   const [sortBy, setSortBy] = useState('created_at');
   const [sortDir, setSortDir] = useState<'ASC' | 'DESC'>('DESC');
   const [caseDetail, setCaseDetail] = useState<TestCaseDetail | null>(null);
@@ -68,6 +72,7 @@ export default function TestCasesPage() {
       const params = new URLSearchParams({
         page: String(page), limit: String(pagination.limit),
         sortBy, sortDir, lifecycle: filters.lifecycle,
+        lang: locale,
         ...(filters.search && { search: filters.search }),
         ...(filters.moduleId && { moduleId: filters.moduleId }),
         ...(filters.featureId && { featureId: filters.featureId }),
@@ -83,7 +88,7 @@ export default function TestCasesPage() {
         setPagination(data.pagination);
       }
     } finally { setLoading(false); }
-  }, [filters, sortBy, sortDir, pagination.limit]);
+  }, [filters, sortBy, sortDir, pagination.limit, locale]);
 
   useEffect(() => {
     fetch('/api/modules')
@@ -96,7 +101,7 @@ export default function TestCasesPage() {
       .catch(() => setFeatures([]));
   }, []);
 
-  useEffect(() => { fetchData(1); }, [filters, sortBy, sortDir]);
+  useEffect(() => { fetchData(1); }, [filters, sortBy, sortDir, locale]);
 
   const safeFeatures = Array.isArray(features) ? features : [];
   const filteredFeatures = safeFeatures.filter(f => !filters.moduleId || f.module_id === Number(filters.moduleId));
@@ -133,7 +138,7 @@ export default function TestCasesPage() {
 
   const openView = async (tc: TestCase) => {
     setViewCase(tc);
-    const res = await fetch(`/api/test-cases/${tc.id}`);
+    const res = await fetch(`/api/test-cases/${tc.id}?lang=${locale}`);
     if (res.ok) setCaseDetail(await res.json());
   };
 
@@ -218,36 +223,77 @@ export default function TestCasesPage() {
     else setSelected(new Set(testCases.map(tc => tc.id)));
   };
 
-  const exportCSV = () => {
+  const exportData = (format: 'csv' | 'xlsx') => {
     const params = new URLSearchParams({
       type: 'test-cases',
+      format,
+      lang: locale,
+      ...(filters.lifecycle && { lifecycle: filters.lifecycle }),
       ...(filters.moduleId && { moduleId: filters.moduleId }),
+      ...(filters.featureId && { featureId: filters.featureId }),
     });
-    window.open(`/api/export?${params}`);
+    const link = document.createElement('a');
+    link.href = `/api/export?${params.toString()}`;
+    link.setAttribute('download', `test_cases_${locale}.${format}`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleTranslateCurrent = async (id: number) => {
+    setTranslating(true);
+    try {
+      const res = await fetch(`/api/test-cases/${id}/translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetLang: locale === 'id' ? 'id' : 'en' })
+      });
+      if (res.ok) {
+        toast.success(locale === 'id' ? 'Berhasil diterjemahkan ke Bahasa Indonesia' : 'Translated successfully');
+        const detailRes = await fetch(`/api/test-cases/${id}?lang=${locale}`);
+        if (detailRes.ok) {
+          const detail = await detailRes.json();
+          setCaseDetail(detail);
+          setViewCase(detail.testCase);
+        }
+        fetchData(pagination.page);
+      } else {
+        const err = await res.json();
+        toast.error(err.error || 'Translation failed');
+      }
+    } catch {
+      toast.error('Translation network request failed');
+    } finally {
+      setTranslating(false);
+    }
   };
 
   return (
     <AppShell>
       {/* Header */}
-      <header className="page-header main-header">
-        <div>
-          <h1 className="page-title">Test Cases</h1>
-          <p className="page-subtitle">
-            {pagination.total} test case{pagination.total === 1 ? '' : 's'} {filters.lifecycle !== 'all' ? `(${filters.lifecycle})` : ''}
+      <header className="page-header main-header" style={{ alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+          <h1 className="page-title" style={{ margin: 0, fontWeight: 700 }}>{t('testCases.title', 'Test Cases')}</h1>
+          <p className="page-subtitle" style={{ margin: '6px 0 14px 0', fontSize: 13, color: 'var(--foreground-muted)' }}>
+            {pagination.total} {t('common.testCases', 'Test Cases')} {filters.lifecycle !== 'all' ? `(${filters.lifecycle})` : ''}
           </p>
+          <button className="btn btn-primary" onClick={openCreate} id="btn-create-testcase" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Plus size={14} /> {t('testCases.createTestCase', 'New Test Case')}
+          </button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {selected.size > 0 && (
             <button className="btn btn-secondary btn-sm" onClick={bulkMarkObsolete}>
-              <X size={13} /> Mark Obsolete ({selected.size})
+              <X size={13} /> {t('common.delete', 'Mark Obsolete')} ({selected.size})
             </button>
           )}
-          <button className="btn btn-secondary" onClick={exportCSV}>
-            <Download size={14} /> Export CSV
+          <button className="btn btn-secondary" onClick={() => exportData('csv')} title="Export CSV (UTF-8)">
+            <Download size={14} /> {t('common.export', 'Export')} CSV
           </button>
-          <button className="btn btn-primary" onClick={openCreate} id="btn-create-testcase">
-            <Plus size={14} /> New Test Case
+          <button className="btn btn-secondary" onClick={() => exportData('xlsx')} title="Export Excel format">
+            <Download size={14} /> Excel (.xlsx)
           </button>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>
@@ -259,7 +305,7 @@ export default function TestCasesPage() {
             <Search size={14} className="search-icon" />
             <input
               className="form-control"
-              placeholder="Search ID, title, ref..."
+              placeholder={t('common.search', 'Search ID, title, ref...')}
               value={filters.search}
               onChange={e => setFilters(p => ({ ...p, search: e.target.value }))}
               id="search-testcases"
@@ -267,35 +313,35 @@ export default function TestCasesPage() {
           </div>
           <select className="form-control" style={{ width: 160 }} value={filters.moduleId}
             onChange={e => setFilters(p => ({ ...p, moduleId: e.target.value, featureId: '' }))}>
-            <option value="">All Modules</option>
+            <option value="">{t('common.all', 'All Modules')}</option>
             {modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
           <select className="form-control" style={{ width: 160 }} value={filters.featureId}
             onChange={e => setFilters(p => ({ ...p, featureId: e.target.value }))}>
-            <option value="">All Features</option>
+            <option value="">{t('common.all', 'All Features')}</option>
             {filteredFeatures.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
           <select className="form-control" style={{ width: 140 }} value={filters.priority}
             onChange={e => setFilters(p => ({ ...p, priority: e.target.value }))}>
-            <option value="">All Priorities</option>
+            <option value="">{t('common.all', 'All Priorities')}</option>
             {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
           <select className="form-control" style={{ width: 140 }} value={filters.prepStatus}
             onChange={e => setFilters(p => ({ ...p, prepStatus: e.target.value }))}>
-            <option value="">Prep Status</option>
+            <option value="">{t('testCases.prepStatus', 'Prep Status')}</option>
             {PREP_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
           <select className="form-control" style={{ width: 130 }} value={filters.latestResult}
             onChange={e => setFilters(p => ({ ...p, latestResult: e.target.value }))}>
-            {EXEC_RESULTS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            {EXEC_RESULTS.map(r => <option key={r.value} value={r.value}>{r.value ? r.label : t('common.all', 'All Results')}</option>)}
           </select>
           <select className="form-control" style={{ width: 120 }} value={filters.lifecycle}
             onChange={e => setFilters(p => ({ ...p, lifecycle: e.target.value }))}>
-            <option value="active">Active</option>
-            <option value="draft">Draft</option>
-            <option value="obsolete">Obsolete</option>
-            <option value="archived">Archived</option>
-            <option value="all">All</option>
+            <option value="active">{t('common.active', 'Active')}</option>
+            <option value="draft">{t('common.draft', 'Draft')}</option>
+            <option value="obsolete">{t('common.obsolete', 'Obsolete')}</option>
+            <option value="archived">{t('common.archived', 'Archived')}</option>
+            <option value="all">{t('common.all', 'All')}</option>
           </select>
         </div>
       </div>
@@ -304,9 +350,9 @@ export default function TestCasesPage() {
       {loading ? <LoadingSpinner /> : testCases.length === 0 ? (
         <EmptyState
           icon={<ClipboardList size={28} />}
-          title="No test cases found"
-          description="Create a new test case or change search filters"
-          action={<button className="btn btn-primary" onClick={openCreate}><Plus size={13} /> New Test Case</button>}
+          title={t('common.noData', 'No test cases found')}
+          description={t('testCases.subtitle', 'Create a new test case or change search filters')}
+          action={<button className="btn btn-primary" onClick={openCreate}><Plus size={13} /> {t('testCases.createTestCase', 'New Test Case')}</button>}
         />
       ) : (
         <>
@@ -318,17 +364,17 @@ export default function TestCasesPage() {
                     <input type="checkbox" checked={selected.size === testCases.length && testCases.length > 0} onChange={selectAll} />
                   </th>
                   <th onClick={() => handleSort('case_id')} style={{ cursor: 'pointer' }}>
-                    ID {renderSortIcon('case_id', sortBy, sortDir)}
+                    {t('testCases.caseId', 'ID')} {renderSortIcon('case_id', sortBy, sortDir)}
                   </th>
                   <th onClick={() => handleSort('title')} style={{ cursor: 'pointer', minWidth: 200 }}>
-                    Title {renderSortIcon('title', sortBy, sortDir)}
+                    {t('testCases.caseTitle', 'Title')} {renderSortIcon('title', sortBy, sortDir)}
                   </th>
-                  <th>Module / Feature</th>
-                  <th onClick={() => handleSort('priority')} style={{ cursor: 'pointer' }}>Priority {renderSortIcon('priority', sortBy, sortDir)}</th>
-                  <th>Type</th>
-                  <th onClick={() => handleSort('prep_status')} style={{ cursor: 'pointer' }}>Preparation {renderSortIcon('prep_status', sortBy, sortDir)}</th>
-                  <th onClick={() => handleSort('latest_result')} style={{ cursor: 'pointer' }}>Result {renderSortIcon('latest_result', sortBy, sortDir)}</th>
-                  <th style={{ width: 120 }}>Actions</th>
+                  <th>{t('modules.title', 'Module / Feature')}</th>
+                  <th onClick={() => handleSort('priority')} style={{ cursor: 'pointer' }}>{t('common.priority', 'Priority')} {renderSortIcon('priority', sortBy, sortDir)}</th>
+                  <th>{t('testCases.testType', 'Type')}</th>
+                  <th onClick={() => handleSort('prep_status')} style={{ cursor: 'pointer' }}>{t('testCases.prepStatus', 'Preparation')} {renderSortIcon('prep_status', sortBy, sortDir)}</th>
+                  <th onClick={() => handleSort('latest_result')} style={{ cursor: 'pointer' }}>{t('testCases.latestResult', 'Result')} {renderSortIcon('latest_result', sortBy, sortDir)}</th>
+                  <th style={{ width: 120 }}>{t('common.actions', 'Actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -342,7 +388,7 @@ export default function TestCasesPage() {
                       )}
                     </td>
                     <td>
-                      <div style={{ fontWeight: 500, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontWeight: 500, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {tc.title}
                       </div>
                       {tc.requirement_ref && (
@@ -520,7 +566,34 @@ export default function TestCasesPage() {
               <ResultBadge result={viewCase.latest_result} />
               <LifecycleBadge status={viewCase.lifecycle_status} />
             </div>
-            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>{viewCase.title}</h3>
+
+            {/* Translation Status & Action Banner */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 8, marginBottom: 16, border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                <Globe size={15} style={{ color: 'var(--primary)' }} />
+                <span><strong>{locale === 'id' ? 'Versi Bahasa:' : 'Language Version:'}</strong></span>
+                <span className={`badge ${viewCase.has_translation ? (viewCase.translation_reviewed ? 'badge-success' : 'badge-info') : 'badge-warning'}`}>
+                  {locale === 'id'
+                    ? (viewCase.source_language === 'id' ? 'Bahasa Indonesia (Asli)' : (viewCase.translation_reviewed ? 'IDN (Ditinjau QA)' : 'IDN (Draf AI)'))
+                    : (viewCase.source_language === 'en' ? 'English (Original)' : (viewCase.translation_reviewed ? 'ENG (Reviewed)' : 'ENG (AI Draft)'))}
+                </span>
+              </div>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleTranslateCurrent(viewCase.id)}
+                disabled={translating}
+              >
+                {translating ? <span className="spinner" /> : <Globe size={13} />}
+                {locale === 'id' ? 'Terjemahkan / Perbarui IDN' : 'Translate / Refresh ENG'}
+              </button>
+            </div>
+
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>{viewCase.title}</h3>
+            {viewCase.original_title && viewCase.original_title !== viewCase.title && (
+              <div style={{ fontSize: 12, color: 'var(--foreground-muted)', marginBottom: 14 }}>
+                <strong>{viewCase.source_language === 'id' ? 'Original IDN:' : 'Original EN:'}</strong> {viewCase.original_title}
+              </div>
+            )}
             <div style={{ display: 'grid', gap: 14 }}>
               {viewCase.requirement_ref && <DetailRow label="Requirement Reference" value={viewCase.requirement_ref} />}
               <DetailRow label="Module / Feature" value={`${viewCase.module_name} → ${viewCase.feature_name}`} />

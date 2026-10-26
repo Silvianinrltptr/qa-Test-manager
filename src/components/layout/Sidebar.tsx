@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useI18n } from '@/lib/i18n/context';
 import {
   LayoutDashboard, Layers, Sparkles, Upload,
   Play, BarChart3, History, Settings, ClipboardList, FlaskConical,
@@ -21,45 +22,45 @@ interface NavSection {
   items: NavItem[];
 }
 
-const NAV: NavSection[] = [
+const getNavSections = (t: (key: string, fallback?: string) => string): NavSection[] => [
   {
-    label: 'Main',
+    label: t('nav.main', 'Main'),
     items: [
-      { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-      { href: '/modules', icon: Layers, label: 'Modules & Features' },
-      { href: '/requirements', icon: FileCheck2, label: 'PRD & Requirements' },
-      { href: '/test-cases', icon: ClipboardList, label: 'Test Cases' },
-      { href: '/feedback', icon: Inbox, label: 'Feedback Inbox', isFeedback: true },
+      { href: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard', 'Dashboard') },
+      { href: '/modules', icon: Layers, label: t('nav.modules', 'Modules & Features') },
+      { href: '/requirements', icon: FileCheck2, label: t('nav.requirements', 'PRD & Requirements') },
+      { href: '/test-cases', icon: ClipboardList, label: t('nav.testCases', 'Test Cases') },
+      { href: '/feedback', icon: Inbox, label: t('nav.feedback', 'Feedback Inbox'), isFeedback: true },
     ]
   },
   {
-    label: 'Input',
+    label: t('nav.input', 'Input'),
     items: [
-      { href: '/ai-generator', icon: Sparkles, label: 'AI Generator' },
-      { href: '/bulk-add', icon: FlaskConical, label: 'Bulk Add' },
-      { href: '/import', icon: Upload, label: 'Import Excel/CSV' },
+      { href: '/ai-generator', icon: Sparkles, label: t('nav.aiGenerator', 'AI Generator') },
+      { href: '/bulk-add', icon: FlaskConical, label: t('nav.bulkAdd', 'Bulk Add') },
+      { href: '/import', icon: Upload, label: t('nav.importExcel', 'Import Excel/CSV') },
     ]
   },
   {
-    label: 'Execution & Analysis',
+    label: t('nav.executionAnalysis', 'Execution & Analysis'),
     items: [
-      { href: '/execution', icon: Play, label: 'Test Execution' },
-      { href: '/impact-analysis', icon: AlertTriangle, label: 'Impact Analysis' },
-      { href: '/traceability', icon: Network, label: 'Traceability Matrix' },
+      { href: '/execution', icon: Play, label: t('nav.execution', 'Test Execution') },
+      { href: '/impact-analysis', icon: AlertTriangle, label: t('nav.impactAnalysis', 'Impact Analysis') },
+      { href: '/traceability', icon: Network, label: t('nav.traceability', 'Traceability Matrix') },
     ]
   },
   {
-    label: 'Reports & Audit',
+    label: t('nav.reportsAudit', 'Reports & Audit'),
     items: [
-      { href: '/reports', icon: FileText, label: 'Period Reports' },
-      { href: '/weekly-progress', icon: BarChart3, label: 'Weekly Progress' },
-      { href: '/change-log', icon: History, label: 'Change Log' },
+      { href: '/reports', icon: FileText, label: t('nav.reports', 'Period Reports') },
+      { href: '/weekly-progress', icon: BarChart3, label: t('nav.weeklyProgress', 'Weekly Progress') },
+      { href: '/change-log', icon: History, label: t('nav.changeLog', 'Change Log') },
     ]
   },
   {
-    label: 'System',
+    label: t('nav.system', 'System'),
     items: [
-      { href: '/settings', icon: Settings, label: 'Settings' },
+      { href: '/settings', icon: Settings, label: t('nav.settings', 'Settings') },
     ]
   }
 ];
@@ -89,7 +90,10 @@ function QAMonogramIcon({ size = 20, className = '' }: { size?: number; classNam
 export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
+  const { t } = useI18n();
   const [pendingFeedbackCount, setPendingFeedbackCount] = useState<number>(0);
+
+  const navSections = getNavSections(t);
 
   useEffect(() => {
     let isMounted = true;
@@ -120,11 +124,11 @@ export function Sidebar() {
           <QAMonogramIcon size={20} />
           <span>QAE Studio</span>
         </h1>
-        <p>Test Management Workspace</p>
+        <p>{t('common.appSubtitle', 'Test Management Workspace')}</p>
       </div>
 
       <nav className="sidebar-nav" style={{ flex: 1, overflowY: 'auto' }}>
-        {NAV.map(section => (
+        {navSections.map(section => (
           <div key={section.label}>
             <div className="nav-section-label">{section.label}</div>
             {section.items.map(item => {
@@ -180,7 +184,7 @@ export function Sidebar() {
           }}
         >
           <Eye size={14} style={{ color: 'var(--primary)' }} />
-          <span>Switch to Project Viewer</span>
+          <span>{t('nav.switchToProjectViewer', 'Switch to Project Viewer')}</span>
         </Link>
         <button
           type="button"
@@ -211,7 +215,7 @@ export function Sidebar() {
           }}
         >
           <LogOut size={13} />
-          <span>Sign Out</span>
+          <span>{t('nav.signOut', 'Sign Out')}</span>
         </button>
       </div>
     </aside>

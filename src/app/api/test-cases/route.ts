@@ -1,6 +1,7 @@
 import { getDb, generateCaseId, logActivity, logChange } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { resolveTestCaseLanguageContent, isIndonesianText, translateTestCase } from '@/lib/translation';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,8 @@ export async function GET(req: NextRequest) {
     const sortDir = searchParams.get('sortDir') ?? 'DESC';
     const offset = (page - 1) * limit;
 
+    const lang = searchParams.get('lang') || req.cookies.get('qastudio_lang')?.value || 'en';
+
     const conditions: string[] = [];
     const params: (string | number)[] = [];
 
@@ -42,8 +45,8 @@ export async function GET(req: NextRequest) {
     if (latestResult) { conditions.push('tc.latest_result = ?'); params.push(latestResult); }
     if (testType) { conditions.push('tc.test_type = ?'); params.push(testType); }
     if (search) {
-      conditions.push('(tc.case_id LIKE ? OR tc.title LIKE ? OR tc.requirement_ref LIKE ?)');
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      conditions.push('(tc.case_id LIKE ? OR tc.title LIKE ? OR tc.requirement_ref LIKE ? OR tct_id.title LIKE ? OR tct_en.title LIKE ?)');
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
@@ -52,24 +55,78 @@ export async function GET(req: NextRequest) {
     const safeDir = sortDir === 'ASC' ? 'ASC' : 'DESC';
 
     const countResult = (await db.prepare(`
-      SELECT COUNT(*) as count FROM test_cases tc ${where}
+      SELECT COUNT(*) as count 
+      FROM test_cases tc
+      LEFT JOIN test_case_translations tct_id ON tct_id.test_case_id = tc.id AND tct_id.language = 'id'
+      LEFT JOIN test_case_translations tct_en ON tct_en.test_case_id = tc.id AND tct_en.language = 'en'
+      ${where}
     `).get(...params)) as { count: number } | undefined;
 
     const totalCount = countResult ? Number(countResult.count) : 0;
 
-    const testCases = await db.prepare(`
+    const testCases = (await db.prepare(`
       SELECT tc.*, m.name as module_name, m.prefix as module_prefix, f.name as feature_name,
-        (SELECT COUNT(*) FROM test_case_comments WHERE test_case_id = tc.id) as comment_count
+        (SELECT COUNT(*) FROM test_case_comments WHERE test_case_id = tc.id) as comment_count,
+        tct_id.id as trans_id_id,
+        tct_id.title as trans_id_title,
+        tct_id.preconditions as trans_id_preconditions,
+        tct_id.test_steps as trans_id_test_steps,
+        tct_id.test_data as trans_id_test_data,
+        tct_id.expected_result as trans_id_expected_result,
+        tct_id.reviewed as trans_id_reviewed,
+        tct_en.id as trans_en_id,
+        tct_en.title as trans_en_title,
+        tct_en.preconditions as trans_en_preconditions,
+        tct_en.test_steps as trans_en_test_steps,
+        tct_en.test_data as trans_en_test_data,
+        tct_en.expected_result as trans_en_expected_result,
+        tct_en.reviewed as trans_en_reviewed
       FROM test_cases tc
       JOIN modules m ON m.id = tc.module_id
       JOIN features f ON f.id = tc.feature_id
+      LEFT JOIN test_case_translations tct_id ON tct_id.test_case_id = tc.id AND tct_id.language = 'id'
+      LEFT JOIN test_case_translations tct_en ON tct_en.test_case_id = tc.id AND tct_en.language = 'en'
       ${where}
       ORDER BY tc.${safeSort} ${safeDir}
       LIMIT ? OFFSET ?
-    `).all(...params, limit, offset);
+    `).all(...params, limit, offset)) as any[];
+
+    const mappedCases = (testCases || []).map((row: any) => {
+      const resolved = resolveTestCaseLanguageContent(
+        row,
+        {
+          en: row.trans_en_title ? {
+            title: row.trans_en_title,
+            preconditions: row.trans_en_preconditions,
+            test_steps: row.trans_en_test_steps,
+            test_data: row.trans_en_test_data,
+            expected_result: row.trans_en_expected_result,
+            reviewed: Boolean(row.trans_en_reviewed),
+            language: 'en'
+          } : null,
+          id: row.trans_id_title ? {
+            title: row.trans_id_title,
+            preconditions: row.trans_id_preconditions,
+            test_steps: row.trans_id_test_steps,
+            test_data: row.trans_id_test_data,
+            expected_result: row.trans_id_expected_result,
+            reviewed: Boolean(row.trans_id_reviewed),
+            language: 'id'
+          } : null,
+        },
+        lang
+      );
+
+      return {
+        ...row,
+        ...resolved,
+        translation_id: lang === 'id' ? row.trans_id_id : row.trans_en_id,
+        translation_lang: resolved.display_language,
+      };
+    });
 
     return NextResponse.json({
-      data: testCases || [],
+      data: mappedCases,
       pagination: {
         total: totalCount,
         page,
@@ -148,6 +205,65 @@ export async function POST(req: NextRequest) {
       );
 
       const insertedId = insertRes.lastInsertRowid || ((await db.prepare('SELECT id FROM test_cases WHERE case_id = ?').get(caseId)) as any)?.id;
+
+      // Save source translation and translate to opposite language
+      const isIdSource = isIndonesianText(c.title);
+      const sourceLang = isIdSource ? 'id' : 'en';
+      const targetLang = isIdSource ? 'en' : 'id';
+
+      try {
+        // 1. Save source language translation
+        await db.prepare(`
+          INSERT INTO test_case_translations (test_case_id, language, title, preconditions, test_steps, test_data, expected_result, reviewed, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, true, NOW())
+          ON CONFLICT (test_case_id, language) DO UPDATE SET
+            title = EXCLUDED.title,
+            preconditions = EXCLUDED.preconditions,
+            test_steps = EXCLUDED.test_steps,
+            test_data = EXCLUDED.test_data,
+            expected_result = EXCLUDED.expected_result,
+            reviewed = true,
+            updated_at = NOW()
+        `).run(
+          insertedId, sourceLang, c.title.trim(), c.preconditions || null,
+          c.test_steps || null, c.test_data || null, c.expected_result || null
+        );
+
+        // 2. Automatically translate to target language if AI service is configured
+        if (process.env.DEEPSEEK_API_KEY || process.env.GEMINI_API_KEY) {
+          const transResult = await translateTestCase({
+            title: c.title.trim(),
+            preconditions: c.preconditions || null,
+            test_steps: c.test_steps || null,
+            test_data: c.test_data || null,
+            expected_result: c.expected_result || null,
+          }, targetLang);
+
+          if (transResult.success && transResult.translated) {
+            await db.prepare(`
+              INSERT INTO test_case_translations (test_case_id, language, title, preconditions, test_steps, test_data, expected_result, reviewed, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, false, NOW())
+              ON CONFLICT (test_case_id, language) DO UPDATE SET
+                title = EXCLUDED.title,
+                preconditions = EXCLUDED.preconditions,
+                test_steps = EXCLUDED.test_steps,
+                test_data = EXCLUDED.test_data,
+                expected_result = EXCLUDED.expected_result,
+                reviewed = false,
+                updated_at = NOW()
+            `).run(
+              insertedId, targetLang,
+              transResult.translated.title,
+              transResult.translated.preconditions || null,
+              transResult.translated.test_steps || null,
+              transResult.translated.test_data || null,
+              transResult.translated.expected_result || null
+            );
+          }
+        }
+      } catch (tErr) {
+        console.warn('Auto translation on create failed for TC #' + insertedId, tErr);
+      }
 
       await logActivity(db, 'created', 'test_case', insertedId, caseId, `Test case "${c.title}" created`);
       await logChange(db, {

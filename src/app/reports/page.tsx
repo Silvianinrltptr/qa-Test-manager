@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import type { Module, Feature, TestResult } from '@/lib/types';
+import { useI18n } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 interface DefectItem {
   defect_ref: string;
@@ -72,6 +74,7 @@ interface ReportData {
 }
 
 export default function ReportsPage() {
+  const { t } = useI18n();
   const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('weekly');
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
@@ -155,16 +158,17 @@ export default function ReportsPage() {
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <FileText size={20} style={{ color: 'var(--primary)' }} />
-            QA Period Reports
+            {t('reports.title', 'QA Period Reports')}
           </h1>
           <p className="page-subtitle">
-            Daily, weekly, monthly, or custom date range reports distinguishing current actual state from period activities
+            {t('reports.subtitle', 'Daily, weekly, monthly, or custom date range reports distinguishing current actual state from period activities')}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-secondary" onClick={handlePrint} id="btn-print-report">
-            <Printer size={14} /> Print / Save PDF
+            <Printer size={14} /> {t('reports.printReport', 'Print / Save PDF')}
           </button>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>

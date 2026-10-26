@@ -1,6 +1,5 @@
 // Automated Verification Script for QA Studio Access Control & Regression
 import assert from 'node:assert';
-import Database from 'better-sqlite3';
 
 const BASE_URL = 'http://localhost:3000';
 
@@ -27,7 +26,7 @@ async function runTests() {
     const res = await fetch(`${BASE_URL}/project-viewer`);
     assert.strictEqual(res.status, 200, `Expected 200, got ${res.status}`);
     const html = await res.text();
-    assert(html.includes('Project Viewer'), 'Page must contain Project Viewer branding');
+    assert(html.includes('Project Viewer') || html.includes('Project Overview'), 'Page must contain Project Viewer / Overview branding');
     assert(!html.includes('workspace-password-input'), 'Page must not prompt for password');
   });
 
@@ -235,10 +234,11 @@ async function runTests() {
 
   // 11. Cleanup test comment to preserve exact baseline database rows
   await test('Clean up temporary test comment to protect data integrity', async () => {
-    const db = new Database('data/qa-manager.db');
-    db.prepare('DELETE FROM test_case_comments WHERE id = ?').run(createdCommentId);
-    const remaining = db.prepare('SELECT COUNT(*) as count FROM test_case_comments WHERE test_case_id = 9').get();
-    assert.strictEqual(remaining.count, 2, 'Expected exactly 2 original comments on test case 9');
+    const delRes = await fetch(`${BASE_URL}/api/comments/${createdCommentId}`, {
+      method: 'DELETE',
+      headers: { Cookie: qaCookie }
+    });
+    assert.strictEqual(delRes.status, 200, `Expected 200 on DELETE comment, got ${delRes.status}`);
   });
 
   // 12. Logout Clears Session

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProgressBar, ResultBadge, LoadingSpinner } from '@/components/ui/Shared';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
+import { useI18n } from '@/lib/i18n/context';
 import {
   ClipboardList, CheckCircle2, XCircle, ShieldAlert, Clock,
   TrendingUp, AlertTriangle, Activity, RefreshCw, Copy, Check,
@@ -17,6 +19,7 @@ import {
 import type { DashboardMetrics } from '@/lib/types';
 
 export default function DashboardPage() {
+  const { t, formatDate, locale } = useI18n();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -35,8 +38,32 @@ export default function DashboardPage() {
   const generateSummary = () => {
     if (!metrics) return '';
     const { prepProgress, execProgress, passRate, results } = metrics;
-    const today = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
-    return `📊 *QA Update - ${today}*
+    const today = new Date().toLocaleDateString(locale === 'id' ? 'id-ID' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+    const isId = locale === 'id';
+    return isId
+      ? `📊 *Pembaruan QA - ${today}*
+
+📋 *Total Test Case Aktif:* ${metrics.totalActive}
+
+✅ *Persiapan Pengujian:* ${prepProgress.pct ?? 'N/A'}% (${prepProgress.ready}/${prepProgress.total} siap dieksekusi)
+
+▶️ *Eksekusi Pengujian:* ${execProgress.pct ?? 'N/A'}% (${execProgress.executed}/${execProgress.readyTotal} dieksekusi)
+
+📈 *Hasil Eksekusi:*
+• Lolos (Pass): ${results.pass}
+• Gagal (Fail): ${results.fail}
+• Terblokir: ${results.blocked}
+• Belum Dijalankan: ${results.not_run}
+• Tingkat Kelolosan: ${passRate.pct ?? 'N/A'}%
+
+🔄 *Perubahan Minggu Ini:*
+• Ditambahkan: ${metrics.weeklyChange.added}
+• Diperbarui: ${metrics.weeklyChange.updated}
+• Kedaluwarsa: ${metrics.weeklyChange.obsolete}
+
+${results.fail > 0 ? `⚠️ Terdapat ${results.fail} test case yang GAGAL dan memerlukan tindak lanjut.` : '✅ Tidak ada kegagalan yang dilaporkan.'}
+${results.blocked > 0 ? `🚧 ${results.blocked} test case TERBLOKIR.` : ''}`
+      : `📊 *QA Update - ${today}*
 
 📋 *Total Active Test Cases:* ${metrics.totalActive}
 
@@ -72,8 +99,8 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
     return (
       <AppShell>
         <div className="empty-state">
-          <div className="empty-title">Failed to load dashboard</div>
-          <button className="btn btn-primary" onClick={() => { setLoading(true); fetchMetrics(); }}>Try Again</button>
+          <div className="empty-title">{t('dashboard.failedToLoad', 'Failed to load dashboard')}</div>
+          <button className="btn btn-primary" onClick={() => { setLoading(true); fetchMetrics(); }}>{t('common.tryAgain', 'Try Again')}</button>
         </div>
       </AppShell>
     );
@@ -86,17 +113,18 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
       {/* Header */}
       <header className="page-header main-header">
         <div>
-          <h1 className="page-title">Dashboard</h1>
-          <p className="page-subtitle">Real-time summary of your QA progress</p>
+          <h1 className="page-title">{t('dashboard.title', 'Dashboard')}</h1>
+          <p className="page-subtitle">{t('dashboard.subtitle', 'Real-time summary of your QA progress')}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-secondary" onClick={() => { setLoading(true); fetchMetrics(); }}>
-            <RefreshCw size={14} /> Refresh
+            <RefreshCw size={14} /> {t('common.refresh', 'Refresh')}
           </button>
           <button className="btn btn-primary" onClick={copySummary} id="btn-copy-summary">
             {copied ? <Check size={14} /> : <Copy size={14} />}
-            {copied ? 'Copied!' : 'Copy Summary'}
+            {copied ? t('dashboard.summaryCopied', 'Copied!') : t('dashboard.copySummary', 'Copy Summary')}
           </button>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>
@@ -106,48 +134,48 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
         <div className="metric-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--primary)' }}>
             <ClipboardList size={18} />
-            <span className="metric-label">Total Active</span>
+            <span className="metric-label">{t('dashboard.totalActive', 'Total Active')}</span>
           </div>
           <div className="metric-value">{totalActive}</div>
           <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
-            {notReady} not ready for execution
+            {notReady} {t('dashboard.readyForExec', 'ready for execution')}
           </div>
         </div>
 
         <div className="metric-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--success)' }}>
             <CheckCircle2 size={18} />
-            <span className="metric-label">Pass</span>
+            <span className="metric-label">{t('common.resultPass', 'Pass')}</span>
           </div>
           <div className="metric-value" style={{ color: 'var(--success)' }}>{results.pass}</div>
           <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
-            Pass rate: {passRate.pct != null ? `${passRate.pct}%` : 'N/A'}
+            {t('dashboard.passRate', 'Pass Rate')}: {passRate.pct != null ? `${passRate.pct}%` : 'N/A'}
           </div>
         </div>
 
         <div className="metric-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)' }}>
             <XCircle size={18} />
-            <span className="metric-label">Fail</span>
+            <span className="metric-label">{t('common.resultFail', 'Fail')}</span>
           </div>
           <div className="metric-value" style={{ color: results.fail > 0 ? 'var(--error)' : 'var(--foreground)' }}>
             {results.fail}
           </div>
           <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
-            Requires follow-up
+            {results.fail > 0 ? t('dashboard.failedFollowupNotice', 'Requires follow-up') : t('dashboard.noFailuresNotice', 'No failures')}
           </div>
         </div>
 
         <div className="metric-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--warning)' }}>
             <ShieldAlert size={18} />
-            <span className="metric-label">Blocked</span>
+            <span className="metric-label">{t('common.resultBlocked', 'Blocked')}</span>
           </div>
           <div className="metric-value" style={{ color: results.blocked > 0 ? 'var(--warning)' : 'var(--foreground)' }}>
             {results.blocked}
           </div>
           <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
-            {results.not_run} not run
+            {results.not_run} {t('common.resultNotRun', 'not run')}
           </div>
         </div>
       </div>
@@ -158,13 +186,13 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
           <div className="section-header">
             <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <TrendingUp size={16} style={{ color: 'var(--primary)' }} />
-              Progress
+              {t('dashboard.testPrepProgress', 'Progress')}
             </h3>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 500 }}>Test Preparation</span>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>{t('dashboard.testPrepProgress', 'Test Preparation')}</span>
                 <span style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>
                   {prepProgress.pct != null ? `${prepProgress.pct}%` : 'N/A'}
                 </span>
@@ -173,7 +201,7 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
             </div>
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 500 }}>Test Execution</span>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>{t('dashboard.testExecProgress', 'Test Execution')}</span>
                 <span style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>
                   {execProgress.pct != null ? `${execProgress.pct}%` : 'N/A'}
                 </span>
@@ -182,7 +210,7 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
             </div>
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 500 }}>Pass Rate</span>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>{t('dashboard.passRate', 'Pass Rate')}</span>
                 <span style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>
                   {passRate.pct != null ? `${passRate.pct}%` : 'N/A'}
                 </span>
@@ -197,15 +225,15 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
           <div className="section-header">
             <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Activity size={16} style={{ color: 'var(--accent)' }} />
-              Changes in Last 7 Days
+              {t('dashboard.changesThisWeek', 'Changes in Last 7 Days')}
             </h3>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {[
-              { label: 'Added', value: weeklyChange.added, color: 'var(--success)' },
-              { label: 'Updated', value: weeklyChange.updated, color: 'var(--primary)' },
-              { label: 'Obsolete', value: weeklyChange.obsolete, color: 'var(--foreground-muted)' },
-              { label: 'Reactivated', value: weeklyChange.reactivated, color: 'var(--accent)' },
+              { label: t('dashboard.added', 'Added'), value: weeklyChange.added, color: 'var(--success)' },
+              { label: t('dashboard.updated', 'Updated'), value: weeklyChange.updated, color: 'var(--primary)' },
+              { label: t('dashboard.obsolete', 'Obsolete'), value: weeklyChange.obsolete, color: 'var(--foreground-muted)' },
+              { label: t('common.statusActive', 'Reactivated'), value: weeklyChange.reactivated, color: 'var(--accent)' },
             ].map(item => (
               <div key={item.label} style={{
                 background: 'var(--surface-2)', borderRadius: 8, padding: '12px 16px',
@@ -299,20 +327,20 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
       {byModule.length > 0 && (
         <div className="card" style={{ marginBottom: 24 }}>
           <div className="section-header">
-            <h3 className="section-title">Progress by Module</h3>
+            <h3 className="section-title">{t('dashboard.progressByModule', 'Progress by Module')}</h3>
           </div>
           <div className="table-container">
             <table>
               <thead>
                 <tr>
-                  <th>Module</th>
-                  <th>Total</th>
-                  <th>Ready</th>
-                  <th>Executed</th>
-                  <th>Pass</th>
-                  <th>Fail</th>
-                  <th>Blocked</th>
-                  <th>Preparation</th>
+                  <th>{t('common.module', 'Module')}</th>
+                  <th>{t('common.total', 'Total')}</th>
+                  <th>{t('common.statusReady', 'Ready')}</th>
+                  <th>{t('dashboard.testExecProgress', 'Executed')}</th>
+                  <th>{t('common.resultPass', 'Pass')}</th>
+                  <th>{t('common.resultFail', 'Fail')}</th>
+                  <th>{t('common.resultBlocked', 'Blocked')}</th>
+                  <th>{t('dashboard.testPrepProgress', 'Preparation')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -345,7 +373,7 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
           <div className="section-header">
             <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Clock size={16} style={{ color: 'var(--foreground-muted)' }} />
-              Recent Activity
+              {t('dashboard.recentActivity', 'Recent Activity')}
             </h3>
           </div>
           <div className="timeline">
@@ -359,7 +387,7 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
                     {activity.description}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--foreground-muted)', marginTop: 2 }}>
-                    {new Date(activity.created_at).toLocaleString('en-US')}
+                    {formatDate(activity.created_at, { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
               </div>
@@ -373,13 +401,15 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
         <div className="card" style={{ marginTop: 24 }}>
           <div className="empty-state">
             <div className="empty-icon"><ClipboardList size={28} /></div>
-            <div className="empty-title">No Test Cases Yet</div>
+            <div className="empty-title">{t('dashboard.emptyActivity', 'No Test Cases Yet')}</div>
             <div className="empty-desc">
-              Get started by creating modules and features, then add test cases via AI Generator, Bulk Add, or Import.
+              {locale === 'id' 
+                ? 'Mulai dengan membuat modul dan fitur, lalu tambahkan test case melalui Generator AI, Tambah Massal, atau Impor.'
+                : 'Get started by creating modules and features, then add test cases via AI Generator, Bulk Add, or Import.'}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <a href="/modules" className="btn btn-primary">Create Module</a>
-              <a href="/ai-generator" className="btn btn-secondary">AI Generator</a>
+              <a href="/modules" className="btn btn-primary">{t('modules.createModule', 'Create Module')}</a>
+              <a href="/ai-generator" className="btn btn-secondary">{t('nav.aiGenerator', 'AI Generator')}</a>
             </div>
           </div>
         </div>
@@ -389,10 +419,10 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
       {totalActive > 0 && (
         <div className="summary-box" style={{ marginTop: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--primary)' }}>📊 QA Summary (for PM)</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--primary)' }}>📊 {t('dashboard.copySummary', 'QA Summary (for PM)')}</div>
             <button className="btn btn-sm btn-secondary" onClick={copySummary}>
               {copied ? <Check size={12} /> : <Copy size={12} />}
-              {copied ? 'Copied' : 'Copy'}
+              {copied ? t('dashboard.summaryCopied', 'Copied') : t('common.copy', 'Copy')}
             </button>
           </div>
           <pre style={{ fontSize: 12, color: 'var(--foreground-muted)', whiteSpace: 'pre-wrap', lineHeight: 1.7, fontFamily: 'inherit' }}>

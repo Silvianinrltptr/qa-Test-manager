@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import type { Module, Feature } from '@/lib/types';
+import { useI18n } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 interface RequirementItem {
   id: number;
@@ -42,6 +44,7 @@ interface RequirementHistoryItem {
 
 export default function RequirementsPage() {
   const toast = useToast();
+  const { t } = useI18n();
   const [requirements, setRequirements] = useState<RequirementItem[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
@@ -227,19 +230,20 @@ export default function RequirementsPage() {
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <FileCheck2 size={20} style={{ color: 'var(--primary)' }} />
-            PRD & Requirements
+            {t('requirements.title', 'PRD & Requirements')}
           </h1>
           <p className="page-subtitle">
-            Manage requirement specifications, version changes, and link them to test cases
+            {t('requirements.subtitle', 'Manage requirement specifications, version changes, and link them to test cases')}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Link href="/impact-analysis" className="btn btn-secondary">
-            <AlertTriangle size={14} style={{ color: 'var(--warning)' }} /> Impact Analysis
+            <AlertTriangle size={14} style={{ color: 'var(--warning)' }} /> {t('nav.impactAnalysis', 'Impact Analysis')}
           </Link>
           <button className="btn btn-primary" onClick={handleOpenCreate} id="btn-create-requirement">
-            <Plus size={14} /> Add Requirement
+            <Plus size={14} /> {t('requirements.createRequirement', 'Add Requirement')}
           </button>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>
@@ -251,7 +255,7 @@ export default function RequirementsPage() {
             <Search size={14} className="search-icon" />
             <input
               className="form-control"
-              placeholder="Search ref ID, title, or content..."
+              placeholder={t('common.search', 'Search ref ID, title, or content...')}
               value={filters.search}
               onChange={e => setFilters(p => ({ ...p, search: e.target.value }))}
             />
@@ -262,7 +266,7 @@ export default function RequirementsPage() {
             value={filters.moduleId}
             onChange={e => setFilters(p => ({ ...p, moduleId: e.target.value, featureId: '' }))}
           >
-            <option value="">All Modules</option>
+            <option value="">{t('common.all', 'All Modules')}</option>
             {modules.map(m => (
               <option key={m.id} value={m.id}>{m.name}</option>
             ))}
@@ -273,7 +277,7 @@ export default function RequirementsPage() {
             value={filters.featureId}
             onChange={e => setFilters(p => ({ ...p, featureId: e.target.value }))}
           >
-            <option value="">All Features</option>
+            <option value="">{t('common.all', 'All Features')}</option>
             {filteredFeatures.map(f => (
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
@@ -284,10 +288,10 @@ export default function RequirementsPage() {
             value={filters.status}
             onChange={e => setFilters(p => ({ ...p, status: e.target.value }))}
           >
-            <option value="all">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="obsolete">Obsolete</option>
-            <option value="archived">Archived</option>
+            <option value="all">{t('common.all', 'All Statuses')}</option>
+            <option value="active">{t('common.active', 'Active')}</option>
+            <option value="obsolete">{t('common.obsolete', 'Obsolete')}</option>
+            <option value="archived">{t('common.archived', 'Archived')}</option>
           </select>
         </div>
       </div>
@@ -298,11 +302,11 @@ export default function RequirementsPage() {
       ) : requirements.length === 0 ? (
         <EmptyState
           icon={<FileCheck2 size={32} />}
-          title="No requirements yet"
-          description="Add your first requirement specification to track testing coverage and change impact analysis."
+          title={t('requirements.noRequirements', 'No requirements yet')}
+          description={t('requirements.subtitle', 'Add your first requirement specification to track testing coverage and change impact analysis.')}
           action={
             <button className="btn btn-primary" onClick={handleOpenCreate}>
-              <Plus size={14} /> Add Requirement
+              <Plus size={14} /> {t('requirements.createRequirement', 'Add Requirement')}
             </button>
           }
         />
@@ -311,14 +315,14 @@ export default function RequirementsPage() {
           <table>
             <thead>
               <tr>
-                <th style={{ width: 120 }}>Ref ID</th>
-                <th>Title & Description</th>
-                <th style={{ width: 180 }}>Module & Feature</th>
-                <th style={{ width: 90 }}>Version</th>
-                <th style={{ width: 110 }}>Change Type</th>
-                <th style={{ width: 100 }}>Status</th>
-                <th style={{ width: 110 }}>Test Cases</th>
-                <th style={{ width: 140, textAlign: 'right' }}>Actions</th>
+                <th style={{ width: 120 }}>{t('requirements.reqId', 'Ref ID')}</th>
+                <th>{t('requirements.reqTitle', 'Title & Description')}</th>
+                <th style={{ width: 180 }}>{t('modules.title', 'Module & Feature')}</th>
+                <th style={{ width: 90 }}>{t('common.version', 'Version')}</th>
+                <th style={{ width: 110 }}>{t('requirements.changeType', 'Change Type')}</th>
+                <th style={{ width: 100 }}>{t('common.status', 'Status')}</th>
+                <th style={{ width: 110 }}>{t('modules.testCaseCount', 'Test Cases')}</th>
+                <th style={{ width: 140, textAlign: 'right' }}>{t('common.actions', 'Actions')}</th>
               </tr>
             </thead>
             <tbody>

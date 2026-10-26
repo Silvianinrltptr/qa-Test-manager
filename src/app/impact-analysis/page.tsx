@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import type { Module } from '@/lib/types';
+import { useI18n } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 interface ImpactItem {
   id: string;
@@ -35,6 +37,7 @@ interface ImpactItem {
 
 export default function ImpactAnalysisPage() {
   const toast = useToast();
+  const { t } = useI18n();
   const [impacts, setImpacts] = useState<ImpactItem[]>([]);
   const [stats, setStats] = useState({
     totalImpacts: 0,
@@ -162,16 +165,17 @@ export default function ImpactAnalysisPage() {
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <AlertTriangle size={20} style={{ color: 'var(--warning)' }} />
-            Change Impact Analysis
+            {t('impactAnalysis.title', 'Change Impact Analysis')}
           </h1>
           <p className="page-subtitle">
-            Automatically detect added, changed, or deleted requirements and evaluate impact on test cases
+            {t('impactAnalysis.subtitle', 'Automatically detect added, changed, or deleted requirements and evaluate impact on test cases')}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-secondary" onClick={fetchImpacts}>
-            <RefreshCw size={14} /> Re-analyze
+            <RefreshCw size={14} /> {t('common.refresh', 'Re-analyze')}
           </button>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>

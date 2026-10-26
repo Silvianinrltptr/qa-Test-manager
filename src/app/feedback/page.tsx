@@ -16,8 +16,11 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import type { TestCaseComment, FeedbackInboxStats } from '@/lib/types';
+import { useI18n } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 export default function FeedbackInboxPage() {
+  const { t } = useI18n();
   const [comments, setComments] = useState<TestCaseComment[]>([]);
   const [stats, setStats] = useState<FeedbackInboxStats>({ total: 0, pending: 0, reviewed: 0, resolved: 0 });
   const [loading, setLoading] = useState(true);
@@ -125,18 +128,19 @@ export default function FeedbackInboxPage() {
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Inbox size={26} style={{ color: 'var(--primary)' }} />
-            QA Feedback Inbox
+            {t('feedback.title', 'QA Feedback Inbox')}
             {stats.pending > 0 && (
               <span className="badge badge-error" style={{ fontSize: 13, padding: '2px 8px' }}>
-                {stats.pending} pending
+                {stats.pending} {t('feedback.pending', 'pending')}
               </span>
             )}
           </h1>
           <p className="page-subtitle">
-            Centralized review and reply station for comments and questions submitted by PMs and Developers.
+            {t('feedback.subtitle', 'Centralized review and reply station for comments and questions submitted by PMs and Developers.')}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </div>
@@ -144,25 +148,25 @@ export default function FeedbackInboxPage() {
       {/* Metrics overview */}
       <div className="grid-4" style={{ marginBottom: 24 }}>
         <div className="metric-card">
-          <div className="metric-label">Total Feedback</div>
+          <div className="metric-label">{t('common.all', 'Total Feedback')}</div>
           <div className="metric-value">{stats.total}</div>
           <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>From PMs, Devs & QA</div>
         </div>
 
         <div className="metric-card" style={{ borderLeft: '4px solid var(--warning)' }}>
-          <div className="metric-label" style={{ color: 'var(--warning)' }}>Pending Review</div>
+          <div className="metric-label" style={{ color: 'var(--warning)' }}>{t('feedback.pending', 'Pending Review')}</div>
           <div className="metric-value" style={{ color: 'var(--warning)' }}>{stats.pending}</div>
           <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Requires QA attention</div>
         </div>
 
         <div className="metric-card" style={{ borderLeft: '4px solid var(--info)' }}>
-          <div className="metric-label" style={{ color: 'var(--info)' }}>Reviewed</div>
+          <div className="metric-label" style={{ color: 'var(--info)' }}>{t('feedback.reviewed', 'Reviewed')}</div>
           <div className="metric-value" style={{ color: 'var(--info)' }}>{stats.reviewed}</div>
           <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Acknowledged / replied</div>
         </div>
 
         <div className="metric-card" style={{ borderLeft: '4px solid var(--success)' }}>
-          <div className="metric-label" style={{ color: 'var(--success)' }}>Resolved</div>
+          <div className="metric-label" style={{ color: 'var(--success)' }}>{t('feedback.resolved', 'Resolved')}</div>
           <div className="metric-value" style={{ color: 'var(--success)' }}>{stats.resolved}</div>
           <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Questions answered</div>
         </div>
@@ -177,26 +181,26 @@ export default function FeedbackInboxPage() {
               className={`btn btn-sm ${statusFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setStatusFilter('all')}
             >
-              All ({stats.total})
+              {t('common.all', 'All')} ({stats.total})
             </button>
             <button
               className={`btn btn-sm ${statusFilter === 'pending' ? 'btn-warning' : 'btn-secondary'}`}
               onClick={() => setStatusFilter('pending')}
             >
-              Pending ({stats.pending})
+              {t('feedback.pending', 'Pending')} ({stats.pending})
             </button>
             <button
               className={`btn btn-sm ${statusFilter === 'reviewed' ? 'btn-secondary' : 'btn-secondary'}`}
               style={statusFilter === 'reviewed' ? { background: 'var(--info)', color: '#fff', borderColor: 'var(--info)' } : {}}
               onClick={() => setStatusFilter('reviewed')}
             >
-              Reviewed ({stats.reviewed})
+              {t('feedback.reviewed', 'Reviewed')} ({stats.reviewed})
             </button>
             <button
               className={`btn btn-sm ${statusFilter === 'resolved' ? 'btn-success' : 'btn-secondary'}`}
               onClick={() => setStatusFilter('resolved')}
             >
-              Resolved ({stats.resolved})
+              {t('feedback.resolved', 'Resolved')} ({stats.resolved})
             </button>
           </div>
 
@@ -209,7 +213,7 @@ export default function FeedbackInboxPage() {
                 value={roleFilter}
                 onChange={e => setRoleFilter(e.target.value)}
               >
-                <option value="all">All Roles</option>
+                <option value="all">{t('common.all', 'All Roles')}</option>
                 <option value="pm">PM Feedback</option>
                 <option value="developer">Developer</option>
                 <option value="qa">QA Peer</option>
@@ -221,7 +225,7 @@ export default function FeedbackInboxPage() {
               <input
                 type="text"
                 className="form-control"
-                placeholder="Search feedback..."
+                placeholder={t('common.search', 'Search feedback...')}
                 style={{ width: 220, height: 34, fontSize: 13, paddingLeft: 30 }}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}

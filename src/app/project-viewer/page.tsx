@@ -16,8 +16,11 @@ import {
   LogOut,
   TrendingUp,
   RefreshCw,
+  Globe,
 } from 'lucide-react';
 import type { TestCase, Module, TestCaseComment, DashboardMetrics } from '@/lib/types';
+import { useI18n } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 interface DetailRowProps {
   label: string;
@@ -49,6 +52,7 @@ function DetailRow({ label, value, pre }: DetailRowProps) {
 export default function ProjectViewerPage() {
   const router = useRouter();
   const toast = useToast();
+  const { t, locale } = useI18n();
 
   const [activeTab, setActiveTab] = useState<'cases' | 'health'>('cases');
   const [testCases, setTestCases] = useState<TestCase[]>([]);
@@ -79,7 +83,7 @@ export default function ProjectViewerPage() {
     setRefreshing(true);
     try {
       const [casesRes, modulesRes, dashRes] = await Promise.all([
-        fetch('/api/test-cases?limit=200'),
+        fetch(`/api/test-cases?limit=200&lang=${locale}`),
         fetch('/api/modules'),
         fetch('/api/dashboard'),
       ]);
@@ -97,9 +101,9 @@ export default function ProjectViewerPage() {
         const dashData = await dashRes.json();
         if (dashData && !dashData.error) setDashboardMetrics(dashData as DashboardMetrics);
       }
-      toast.success('Dashboard data refreshed');
+      toast.success(t('projectViewer.toastRefreshed', 'Dashboard data refreshed'));
     } catch {
-      toast.error('Failed to refresh data');
+      toast.error(t('projectViewer.toastRefreshFailed', 'Failed to refresh data'));
     } finally {
       setRefreshing(false);
     }
@@ -108,7 +112,7 @@ export default function ProjectViewerPage() {
   useEffect(() => {
     let ignore = false;
     Promise.all([
-      fetch('/api/test-cases?limit=200').then(r => (r.ok ? r.json() : null)),
+      fetch(`/api/test-cases?limit=200&lang=${locale}`).then(r => (r.ok ? r.json() : null)),
       fetch('/api/modules').then(r => (r.ok ? r.json() : null)),
       fetch('/api/dashboard').then(r => (r.ok ? r.json() : null)),
     ])
@@ -134,7 +138,7 @@ export default function ProjectViewerPage() {
     return () => {
       ignore = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, locale]);
 
   // Fetch comments when viewing a case
   const fetchComments = async (caseId: number) => {
@@ -152,20 +156,45 @@ export default function ProjectViewerPage() {
     }
   };
 
-  const handleOpenCaseDetail = (tc: TestCase) => {
+  const handleOpenCaseDetail = async (tc: TestCase) => {
     setViewCase(tc);
     fetchComments(tc.id);
+    try {
+      const res = await fetch(`/api/test-cases/${tc.id}?lang=${locale}`);
+      if (res.ok) {
+        const d = await res.json();
+        if (d && d.testCase) {
+          setViewCase(d.testCase);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
+
+  // Keep open inspection modal in sync whenever language toggles
+  useEffect(() => {
+    if (viewCase) {
+      fetch(`/api/test-cases/${viewCase.id}?lang=${locale}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => {
+          if (d && d.testCase) {
+            setViewCase(d.testCase);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [locale]);
 
   const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!viewCase) return;
     if (!authorName.trim()) {
-      toast.warning('Please enter your name');
+      toast.warning(t('projectViewer.toastEnterName', 'Please enter your name'));
       return;
     }
     if (!commentContent.trim()) {
-      toast.warning('Please enter your comment or feedback');
+      toast.warning(t('projectViewer.toastEnterComment', 'Please enter your comment or feedback'));
       return;
     }
 
@@ -183,12 +212,12 @@ export default function ProjectViewerPage() {
       });
 
       if (!res.ok) throw new Error('Failed to post comment');
-      toast.success('Feedback submitted to QA team successfully');
+      toast.success(t('projectViewer.toastSuccess', 'Feedback submitted to QA team successfully'));
       setCommentContent('');
       fetchComments(viewCase.id);
       setReloadKey(k => k + 1);
     } catch {
-      toast.error('Failed to submit comment');
+      toast.error(t('projectViewer.toastFailed', 'Failed to submit comment'));
     } finally {
       setSubmittingComment(false);
     }
@@ -220,7 +249,6 @@ export default function ProjectViewerPage() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)', display: 'flex', flexDirection: 'column' }}>
       {/* Top Banner / Navigation for Project Viewer */}
-      {/* Top Banner / Navigation for Project Viewer */}
       <header
         style={{
           background: 'var(--surface)',
@@ -236,16 +264,17 @@ export default function ProjectViewerPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--foreground)' }}>
-                QAE Studio · Project Viewer
+                {t('projectViewer.title', 'QAE Studio · Project Viewer')}
               </div>
               <div style={{ fontSize: 11, color: 'var(--foreground-muted)' }}>
-                Collaborator Portal (PM & Developer View)
+                {t('projectViewer.subtitle', 'Collaborator Portal (PM & Developer View)')}
               </div>
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <LanguageSwitcher />
           <ThemeToggle />
           <button
             type="button"
@@ -262,7 +291,7 @@ export default function ProjectViewerPage() {
             style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--foreground-muted)' }}
           >
             <LogOut size={13} />
-            <span>Sign Out</span>
+            <span>{t('nav.signOut', 'Sign Out')}</span>
           </button>
         </div>
       </header>
@@ -278,7 +307,8 @@ export default function ProjectViewerPage() {
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
               <ClipboardList size={15} />
-              <span>Test Cases ({totalCases})</span>
+              <span>{t('projectViewer.tabCases', 'Test Cases')} ({totalCases})</span>
+              {/* Test Cases ({totalCases}) */}
             </button>
             <button
               className={`btn btn-sm ${activeTab === 'health' ? 'btn-primary' : 'btn-secondary'}`}
@@ -286,13 +316,13 @@ export default function ProjectViewerPage() {
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
               <BarChart3 size={15} />
-              <span>Execution & Health Summary</span>
+              <span>{t('projectViewer.tabHealth', 'Execution & Health Summary')}</span>
             </button>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
-              Viewing as Collaborator · Safe read-only mode active
+              {t('projectViewer.readOnlyNotice', 'Viewing as Collaborator · Safe read-only mode active')}
             </div>
             <button
               type="button"
@@ -300,11 +330,11 @@ export default function ProjectViewerPage() {
               onClick={handleRefresh}
               disabled={refreshing}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-              title="Refresh dashboard data"
+              title={t('common.refresh', 'Refresh dashboard data')}
               id="btn-refresh-dashboard"
             >
               <RefreshCw size={14} style={{ animation: refreshing ? 'spin 0.7s linear infinite' : undefined }} />
-              <span>Refresh</span>
+              <span>{t('common.refresh', 'Refresh')}</span>
             </button>
           </div>
         </div>
@@ -320,7 +350,7 @@ export default function ProjectViewerPage() {
                   <input
                     type="text"
                     className="form-control"
-                    placeholder="Search test cases by ID, title, requirement..."
+                    placeholder={t('projectViewer.searchPlaceholder', 'Search test cases by ID, title, requirement...')}
                     style={{ paddingLeft: 30, height: 36, fontSize: 13 }}
                     value={search}
                     onChange={e => setSearch(e.target.value)}
@@ -335,7 +365,7 @@ export default function ProjectViewerPage() {
                     value={selectedModule}
                     onChange={e => setSelectedModule(e.target.value)}
                   >
-                    <option value="">All Modules</option>
+                    <option value="">{t('projectViewer.allModules', 'All Modules')}</option>
                     {modules.map(m => (
                       <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
@@ -348,11 +378,11 @@ export default function ProjectViewerPage() {
                   value={selectedPriority}
                   onChange={e => setSelectedPriority(e.target.value)}
                 >
-                  <option value="">All Priorities</option>
-                  <option value="critical">Critical</option>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
+                  <option value="">{t('projectViewer.allPriorities', 'All Priorities')}</option>
+                  <option value="critical">{t('projectViewer.priorityCritical', 'Critical')}</option>
+                  <option value="high">{t('projectViewer.priorityHigh', 'High')}</option>
+                  <option value="medium">{t('projectViewer.priorityMedium', 'Medium')}</option>
+                  <option value="low">{t('projectViewer.priorityLow', 'Low')}</option>
                 </select>
 
                 <select
@@ -361,11 +391,11 @@ export default function ProjectViewerPage() {
                   value={selectedResult}
                   onChange={e => setSelectedResult(e.target.value)}
                 >
-                  <option value="">All Results</option>
-                  <option value="pass">Pass</option>
-                  <option value="fail">Fail</option>
-                  <option value="blocked">Blocked</option>
-                  <option value="not_run">Not Run</option>
+                  <option value="">{t('projectViewer.allResults', 'All Results')}</option>
+                  <option value="pass">{t('projectViewer.resultPass', 'Pass')}</option>
+                  <option value="fail">{t('projectViewer.resultFail', 'Fail')}</option>
+                  <option value="blocked">{t('projectViewer.resultBlocked', 'Blocked')}</option>
+                  <option value="not_run">{t('projectViewer.resultNotRun', 'Not Run')}</option>
                 </select>
               </div>
             </div>
@@ -376,11 +406,11 @@ export default function ProjectViewerPage() {
             ) : filteredCases.length === 0 ? (
               <EmptyState
                 icon={<ClipboardList size={32} style={{ color: 'var(--foreground-muted)' }} />}
-                title="No Test Cases Found"
+                title={t('projectViewer.noCasesFound', 'No Test Cases Found')}
                 description={
                   totalCases === 0
-                    ? "No test cases are currently created in QAE Studio."
-                    : "No test cases match your active filter criteria."
+                    ? t('projectViewer.noCasesCreated', 'No test cases are currently created in QAE Studio.')
+                    : t('projectViewer.noCasesMatch', 'No test cases match your active filter criteria.')
                 }
               />
             ) : (
@@ -388,13 +418,13 @@ export default function ProjectViewerPage() {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th style={{ width: 110 }}>Case ID</th>
-                      <th>Title & Scope</th>
-                      <th style={{ width: 120 }}>Priority</th>
-                      <th style={{ width: 110 }}>Prep Status</th>
-                      <th style={{ width: 110 }}>Latest Result</th>
-                      <th style={{ width: 120 }}>Comments</th>
-                      <th style={{ width: 100, textAlign: 'right' }}>Action</th>
+                      <th style={{ width: 110 }}>{t('projectViewer.colCaseId', 'Case ID')}</th>
+                      <th>{t('projectViewer.colTitle', 'Title & Scope')}</th>
+                      <th style={{ width: 120 }}>{t('projectViewer.colPriority', 'Priority')}</th>
+                      <th style={{ width: 110 }}>{t('projectViewer.colPrep', 'Preparation')}</th>
+                      <th style={{ width: 110 }}>{t('projectViewer.colResult', 'Latest Result')}</th>
+                      <th style={{ width: 120 }}>{t('projectViewer.colComments', 'Comments')}</th>
+                      <th style={{ width: 100, textAlign: 'right' }}>{t('projectViewer.colAction', 'Action')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -404,8 +434,10 @@ export default function ProjectViewerPage() {
                           <code style={{ fontWeight: 700, color: 'var(--primary)' }}>{tc.case_id}</code>
                         </td>
                         <td>
-                          <div style={{ fontWeight: 600, color: 'var(--foreground)', marginBottom: 2 }}>
-                            {tc.title}
+                          <div style={{ marginBottom: 2 }}>
+                            <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>
+                              {tc.title}
+                            </span>
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--foreground-muted)', display: 'flex', gap: 8 }}>
                             {tc.module_name && <span>{tc.module_name}</span>}
@@ -426,11 +458,11 @@ export default function ProjectViewerPage() {
                           {(tc.comment_count ?? 0) > 0 ? (
                             <span className="badge badge-primary" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                               <MessageSquare size={11} />
-                              {tc.comment_count} {tc.comment_count === 1 ? 'comment' : 'comments'}
+                              {tc.comment_count} {t('projectViewer.commentsCount', 'comments')}
                             </span>
                           ) : (
                             <span style={{ fontSize: 11, color: 'var(--foreground-dim)' }}>
-                              No feedback
+                              {t('projectViewer.noFeedbackYet', 'No feedback')}
                             </span>
                           )}
                         </td>
@@ -443,7 +475,7 @@ export default function ProjectViewerPage() {
                               handleOpenCaseDetail(tc);
                             }}
                           >
-                            Inspect
+                            {t('projectViewer.actionInspect', 'Inspect')}
                           </button>
                         </td>
                       </tr>
@@ -461,27 +493,29 @@ export default function ProjectViewerPage() {
             {/* Statistics Cards */}
             <div className="grid-4" style={{ marginBottom: 24 }}>
               <div className="metric-card">
-                <div className="metric-label">Total Test Cases</div>
+                <div className="metric-label">{t('projectViewer.statTotalCases', 'Total Test Cases')}</div>
                 <div className="metric-value">{totalCases}</div>
-                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Across all modules</div>
+                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>{t('projectViewer.statAcrossModules', 'Across all modules')}</div>
               </div>
 
               <div className="metric-card" style={{ borderLeft: '4px solid var(--success)' }}>
-                <div className="metric-label" style={{ color: 'var(--success)' }}>Passing Tests</div>
+                <div className="metric-label" style={{ color: 'var(--success)' }}>{t('projectViewer.statPassingTests', 'Passing Tests')}</div>
                 <div className="metric-value" style={{ color: 'var(--success)' }}>{passCases}</div>
-                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Pass rate: {passRate}%</div>
+                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>{t('projectViewer.statPassRate', 'Pass rate')}: {passRate}%</div>
               </div>
 
               <div className="metric-card" style={{ borderLeft: '4px solid var(--error)' }}>
-                <div className="metric-label" style={{ color: 'var(--error)' }}>Failing Tests</div>
+                <div className="metric-label" style={{ color: 'var(--error)' }}>{t('projectViewer.statFailingTests', 'Failing Tests')}</div>
                 <div className="metric-value" style={{ color: 'var(--error)' }}>{failCases}</div>
-                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>Open defect candidates</div>
+                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>{t('projectViewer.statDefectCandidates', 'Open defect candidates')}</div>
               </div>
 
               <div className="metric-card" style={{ borderLeft: '4px solid var(--warning)' }}>
-                <div className="metric-label" style={{ color: 'var(--warning)' }}>Blocked / Not Run</div>
+                <div className="metric-label" style={{ color: 'var(--warning)' }}>{t('projectViewer.statBlockedNotRun', 'Blocked / Not Run')}</div>
                 <div className="metric-value" style={{ color: 'var(--warning)' }}>{blockedCases + notRunCases}</div>
-                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>{blockedCases} blocked, {notRunCases} not run</div>
+                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
+                  {blockedCases} {t('projectViewer.statBlocked', 'blocked')}, {notRunCases} {t('projectViewer.statNotRun', 'not run')}
+                </div>
               </div>
             </div>
 
@@ -490,13 +524,13 @@ export default function ProjectViewerPage() {
               <div className="section-header">
                 <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <TrendingUp size={16} style={{ color: 'var(--primary)' }} />
-                  Progress
+                  {t('projectViewer.progressHeading', 'Progress')}
                 </h3>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 500 }}>Test Preparation</span>
+                    <span style={{ fontSize: 13, fontWeight: 500 }}>{t('projectViewer.prepProgress', 'Test Preparation')}</span>
                     <span style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>
                       {dashboardMetrics?.prepProgress.pct != null ? `${dashboardMetrics.prepProgress.pct}%` : 'N/A'}
                     </span>
@@ -505,7 +539,7 @@ export default function ProjectViewerPage() {
                 </div>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 500 }}>Test Execution</span>
+                    <span style={{ fontSize: 13, fontWeight: 500 }}>{t('projectViewer.execProgress', 'Test Execution')}</span>
                     <span style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>
                       {dashboardMetrics?.execProgress.pct != null ? `${dashboardMetrics.execProgress.pct}%` : 'N/A'}
                     </span>
@@ -514,7 +548,7 @@ export default function ProjectViewerPage() {
                 </div>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 500 }}>Pass Rate</span>
+                    <span style={{ fontSize: 13, fontWeight: 500 }}>{t('projectViewer.passRate', 'Pass Rate')}</span>
                     <span style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>
                       {dashboardMetrics?.passRate.pct != null ? `${dashboardMetrics.passRate.pct}%` : 'N/A'}
                     </span>
@@ -528,20 +562,21 @@ export default function ProjectViewerPage() {
             {dashboardMetrics && dashboardMetrics.byModule.length > 0 && (
               <div className="card" style={{ marginBottom: 24 }}>
                 <div className="section-header">
-                  <h3 className="section-title">Progress by Module</h3>
+                  {/* Progress by Module */}
+                  <h3 className="section-title">{t('projectViewer.progressByModule', 'Progress by Module')}</h3>
                 </div>
                 <div className="table-container">
                   <table>
                     <thead>
                       <tr>
-                        <th>Module</th>
-                        <th>Total</th>
-                        <th>Ready</th>
-                        <th>Executed</th>
-                        <th>Pass</th>
-                        <th>Fail</th>
-                        <th>Blocked</th>
-                        <th>Preparation</th>
+                        <th>{t('projectViewer.colModule', 'Module')}</th>
+                        <th>{t('projectViewer.colTotal', 'Total')}</th>
+                        <th>{t('projectViewer.colReady', 'Ready')}</th>
+                        <th>{t('projectViewer.colExecuted', 'Executed')}</th>
+                        <th>{t('projectViewer.colPass', 'Pass')}</th>
+                        <th>{t('projectViewer.colFail', 'Fail')}</th>
+                        <th>{t('projectViewer.colBlocked', 'Blocked')}</th>
+                        <th>{t('projectViewer.prepProgress', 'Preparation')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -576,7 +611,7 @@ export default function ProjectViewerPage() {
         <Modal
           isOpen={true}
           onClose={() => setViewCase(null)}
-          title={`Test Case: ${viewCase.case_id} — ${viewCase.title}`}
+          title={`${t('common.testCases', 'Test Cases')}: ${viewCase.case_id} — ${viewCase.title}`}
           size="xl"
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -596,20 +631,52 @@ export default function ProjectViewerPage() {
               )}
             </div>
 
-            {/* Test Details */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
-              <DetailRow label="Preconditions" value={viewCase.preconditions} pre />
-              <DetailRow label="Test Data" value={viewCase.test_data} pre />
+            {/* Translation Status Notice (Bilingual Support) */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 12px',
+                borderRadius: 6,
+                background: viewCase.has_translation ? 'rgba(74, 158, 255, 0.1)' : 'rgba(234, 179, 8, 0.1)',
+                border: `1px solid ${viewCase.has_translation ? 'rgba(74, 158, 255, 0.25)' : 'rgba(234, 179, 8, 0.25)'}`,
+                fontSize: 12,
+              }}
+            >
+              <Globe size={14} style={{ color: viewCase.has_translation ? 'var(--primary)' : 'var(--warning)' }} />
+              <span>
+                {t('projectViewer.langVersion', 'Language Version')}:{' '}
+                <strong>
+                  {locale === 'id'
+                    ? (viewCase.source_language === 'id'
+                        ? 'Bahasa Indonesia (Asli)'
+                        : viewCase.has_translation
+                        ? (viewCase.translation_reviewed ? 'Bahasa Indonesia (Ditinjau QA)' : 'Bahasa Indonesia (Draf AI)')
+                        : 'Teks asli English')
+                    : (viewCase.source_language === 'en'
+                        ? 'English (Original)'
+                        : viewCase.has_translation
+                        ? (viewCase.translation_reviewed ? 'English (Reviewed)' : 'English (AI Draft)')
+                        : 'Original Indonesian')}
+                </strong>
+              </span>
             </div>
 
-            <DetailRow label="Test Steps" value={viewCase.test_steps} pre />
-            <DetailRow label="Expected Result" value={viewCase.expected_result} pre />
+            {/* Test Details */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
+              <DetailRow label={t('projectViewer.lblPreconditions', 'Preconditions')} value={viewCase.preconditions} pre />
+              <DetailRow label={t('projectViewer.lblTestData', 'Test Data')} value={viewCase.test_data} pre />
+            </div>
+
+            <DetailRow label={t('projectViewer.lblTestSteps', 'Test Steps')} value={viewCase.test_steps} pre />
+            <DetailRow label={t('projectViewer.lblExpectedResult', 'Expected Result')} value={viewCase.expected_result} pre />
 
             {viewCase.actual_result && (
-              <DetailRow label="Latest Actual Result" value={viewCase.actual_result} pre />
+              <DetailRow label={t('projectViewer.lblActualResult', 'Latest Actual Result')} value={viewCase.actual_result} pre />
             )}
             {viewCase.defect_ref && (
-              <DetailRow label="Reported Defect Reference" value={<code>{viewCase.defect_ref}</code>} />
+              <DetailRow label={t('projectViewer.lblDefectRef', 'Reported Defect Reference')} value={<code>{viewCase.defect_ref}</code>} />
             )}
 
             {/* Comments & Collaborator Feedback Section */}
@@ -617,13 +684,13 @@ export default function ProjectViewerPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                 <MessageSquare size={18} style={{ color: 'var(--primary)' }} />
                 <h4 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>
-                  Collaborator Comments & QA Feedback ({caseComments.length})
+                  {t('projectViewer.commentsHeading', 'Collaborator Comments & QA Feedback')} ({caseComments.length})
                 </h4>
               </div>
 
               {/* Existing Comments List */}
               {loadingComments ? (
-                <div style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>Loading comments...</div>
+                <div style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>{t('projectViewer.loadingComments', 'Loading comments...')}</div>
               ) : caseComments.length === 0 ? (
                 <div
                   style={{
@@ -635,7 +702,7 @@ export default function ProjectViewerPage() {
                     marginBottom: 16,
                   }}
                 >
-                  No feedback or questions submitted on this test case yet. Use the form below to leave suggestions or questions for the QA team.
+                  {t('projectViewer.emptyComments', 'No feedback or questions submitted on this test case yet. Use the form below to leave suggestions or questions for the QA team.')}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
@@ -693,7 +760,7 @@ export default function ProjectViewerPage() {
                           }}
                         >
                           <div style={{ fontWeight: 600, color: 'var(--primary)', marginBottom: 2 }}>
-                            QAE Studio Response:
+                            {t('projectViewer.qaResponse', 'QAE Studio Response')}:
                           </div>
                           <div style={{ color: 'var(--foreground)', whiteSpace: 'pre-wrap' }}>
                             {comment.reply}
@@ -708,16 +775,18 @@ export default function ProjectViewerPage() {
               {/* Submit Feedback Form */}
               <form onSubmit={handlePostComment} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
                 <h5 style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: 'var(--foreground)' }}>
-                  Submit Collaborator Feedback on this Test Case
+                  {t('projectViewer.submitHeading', 'Submit Collaborator Feedback on this Test Case')}
                 </h5>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: 12 }}>Your Name <span style={{ color: 'var(--error)' }}>*</span></label>
+                    <label className="form-label" style={{ fontSize: 12 }}>
+                      {t('projectViewer.yourName', 'Your Name')} <span style={{ color: 'var(--error)' }}>*</span>
+                    </label>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="e.g. Alex PM or Devin Dev"
+                      placeholder={t('projectViewer.namePlaceholder', 'e.g. Alex PM or Devin Dev')}
                       style={{ height: 34, fontSize: 13 }}
                       value={authorName}
                       onChange={e => setAuthorName(e.target.value)}
@@ -725,25 +794,27 @@ export default function ProjectViewerPage() {
                   </div>
 
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: 12 }}>Your Role</label>
+                    <label className="form-label" style={{ fontSize: 12 }}>{t('projectViewer.yourRole', 'Your Role')}</label>
                     <select
                       className="form-control"
                       style={{ height: 34, fontSize: 13 }}
                       value={authorRole}
                       onChange={e => setAuthorRole(e.target.value as 'pm' | 'developer')}
                     >
-                      <option value="pm">Product Manager (PM)</option>
-                      <option value="developer">Developer (Dev)</option>
+                      <option value="pm">{t('projectViewer.rolePm', 'Product Manager (PM)')}</option>
+                      <option value="developer">{t('projectViewer.roleDev', 'Developer (Dev)')}</option>
                     </select>
                   </div>
                 </div>
 
                 <div className="form-group" style={{ marginBottom: 12 }}>
-                  <label className="form-label" style={{ fontSize: 12 }}>Comment or Feedback <span style={{ color: 'var(--error)' }}>*</span></label>
+                  <label className="form-label" style={{ fontSize: 12 }}>
+                    {t('projectViewer.commentLabel', 'Comment or Feedback')} <span style={{ color: 'var(--error)' }}>*</span>
+                  </label>
                   <textarea
                     className="form-control"
                     rows={3}
-                    placeholder="Provide questions, suggestions on steps or expected results, edge cases to add..."
+                    placeholder={t('projectViewer.commentPlaceholder', 'Provide questions, suggestions on steps or expected results, edge cases to add...')}
                     style={{ fontSize: 13 }}
                     value={commentContent}
                     onChange={e => setCommentContent(e.target.value)}
@@ -758,7 +829,7 @@ export default function ProjectViewerPage() {
                     style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                   >
                     <Send size={13} />
-                    <span>{submittingComment ? 'Submitting...' : 'Submit to QA Feedback Inbox'}</span>
+                    <span>{submittingComment ? t('projectViewer.btnSubmitting', 'Submitting...') : t('projectViewer.btnSubmit', 'Submit to QA Feedback Inbox')}</span>
                   </button>
                 </div>
               </form>

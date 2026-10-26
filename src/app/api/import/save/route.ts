@@ -1,6 +1,7 @@
 import { getDb, generateCaseId, logActivity, logChange } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { isIndonesianText, translateTestCase } from '@/lib/translation';
 
 export async function POST(req: NextRequest) {
   try {
@@ -95,6 +96,32 @@ export async function POST(req: NextRequest) {
       );
 
       const insertedId = insertRes.lastInsertRowid || ((await db.prepare('SELECT id FROM test_cases WHERE case_id = ?').get(caseId)) as any)?.id;
+
+      try {
+        const isId = isIndonesianText(title);
+        const sourceLang = isId ? 'id' : 'en';
+        await db.prepare(`
+          INSERT INTO test_case_translations (test_case_id, language, title, preconditions, test_steps, test_data, expected_result, reviewed, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, true, NOW())
+          ON CONFLICT (test_case_id, language) DO UPDATE SET
+            title = EXCLUDED.title,
+            preconditions = EXCLUDED.preconditions,
+            test_steps = EXCLUDED.test_steps,
+            test_data = EXCLUDED.test_data,
+            expected_result = EXCLUDED.expected_result,
+            reviewed = true,
+            updated_at = NOW()
+        `).run(
+          insertedId, sourceLang,
+          title,
+          getVal('preconditions') || null,
+          getVal('test_steps') || null,
+          getVal('test_data') || null,
+          getVal('expected_result') || null
+        );
+      } catch (e) {
+        console.warn('Failed to save source translation for imported TC #' + insertedId, e);
+      }
 
       await logActivity(db, 'imported', 'test_case', insertedId, caseId, `Test case "${title}" imported`);
       await logChange(db, {

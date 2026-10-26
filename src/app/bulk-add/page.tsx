@@ -7,6 +7,8 @@ import { useToast } from '@/components/ui/Toast';
 import { Plus, Trash2, Copy, Save, Upload, Download, AlertTriangle } from 'lucide-react';
 import type { Module, Feature } from '@/lib/types';
 import { TEST_TYPES, PRIORITIES, PREP_STATUSES } from '@/lib/types';
+import { useI18n } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 interface BulkRow {
   id: string;
@@ -35,6 +37,7 @@ const emptyRow = (): BulkRow => ({
 
 export default function BulkAddPage() {
   const toast = useToast();
+  const { t } = useI18n();
   const [modules, setModules] = useState<Module[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
   const [rows, setRows] = useState<BulkRow[]>([emptyRow()]);
@@ -163,17 +166,24 @@ export default function BulkAddPage() {
     <AppShell>
       <header className="page-header main-header">
         <div>
-          <h1 className="page-title">Bulk Add Test Cases</h1>
-          <p className="page-subtitle">Add multiple test cases at once using an editable table or paste from Excel</p>
+          <h1 className="page-title">{t('bulkAdd.title', 'Bulk Add Test Cases')}</h1>
+          <p className="page-subtitle">{t('bulkAdd.subtitle', 'Add multiple test cases at once using an editable table or paste from Excel')}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button className="btn btn-secondary" onClick={downloadTemplate}>
-            <Download size={14} /> Template
+          <a href="/api/export?type=template&format=xlsx" download="qa_template.xlsx" className="btn btn-secondary" title="Excel Template">
+            <Download size={14} /> Excel (.xlsx)
+          </a>
+          <a href="/api/export?type=template" download="qa_template.csv" className="btn btn-secondary" title="CSV Template">
+            <Download size={14} /> CSV
+          </a>
+          <button className="btn btn-secondary" onClick={downloadTemplate} title="TSV Template">
+            <Download size={14} /> TSV
           </button>
           <button className="btn btn-primary" onClick={saveAll} disabled={saving} id="btn-save-all-bulk">
             {saving ? <span className="spinner" /> : <Save size={14} />}
-            Save All ({rows.length})
+            {t('bulkAdd.saveAll', 'Save All')} ({rows.length})
           </button>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>

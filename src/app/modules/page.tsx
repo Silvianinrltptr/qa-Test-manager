@@ -3,13 +3,16 @@
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { EmptyState, LoadingSpinner } from '@/components/ui/Shared';
 import { useToast } from '@/components/ui/Toast';
+import { useI18n } from '@/lib/i18n/context';
 import { Plus, Edit2, Trash2, ChevronRight, Layers, FolderOpen, Package } from 'lucide-react';
 import type { Module, Feature } from '@/lib/types';
 
 export default function ModulesPage() {
+  const { t } = useI18n();
   const toast = useToast();
   const [modules, setModules] = useState<Module[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
@@ -136,16 +139,17 @@ export default function ModulesPage() {
     <AppShell>
       <header className="page-header main-header">
         <div>
-          <h1 className="page-title">Modules & Features</h1>
-          <p className="page-subtitle">Manage Project → Module → Feature hierarchy</p>
+          <h1 className="page-title">{t('modules.title', 'Modules & Features')}</h1>
+          <p className="page-subtitle">{t('modules.subtitle', 'Manage Project → Module → Feature hierarchy')}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-secondary" onClick={() => openCreateFeature()} id="btn-create-feature">
-            <FolderOpen size={14} /> Add Feature
+            <FolderOpen size={14} /> {t('modules.createFeature', 'Add Feature')}
           </button>
           <button className="btn btn-primary" onClick={openCreateModule} id="btn-create-module">
-            <Plus size={14} /> New Module
+            <Plus size={14} /> {t('modules.createModule', 'New Module')}
           </button>
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </header>
@@ -154,14 +158,14 @@ export default function ModulesPage() {
         {/* Module list */}
         <div>
           <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600, color: 'var(--foreground-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Modules ({modules.length})
+            {t('common.module', 'Modules')} ({modules.length})
           </div>
           {modules.length === 0 ? (
             <EmptyState
               icon={<Package size={24} />}
-              title="No modules yet"
+              title={t('modules.noModulesFound', 'No modules yet')}
               description="Create your first module to start organizing test cases"
-              action={<button className="btn btn-primary btn-sm" onClick={openCreateModule}><Plus size={12} /> Create Module</button>}
+              action={<button className="btn btn-primary btn-sm" onClick={openCreateModule}><Plus size={12} /> {t('modules.createModule', 'Create Module')}</button>}
             />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
