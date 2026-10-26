@@ -16,17 +16,31 @@ export async function GET(req: NextRequest) {
     const deepseekKey = process.env.DEEPSEEK_API_KEY;
 
     // Database counts
-    const moduleCount = (db.prepare('SELECT COUNT(*) as c FROM modules').get() as { c: number }).c;
-    const featureCount = (db.prepare('SELECT COUNT(*) as c FROM features').get() as { c: number }).c;
-    const reqCount = (db.prepare('SELECT COUNT(*) as c FROM requirements').get() as { c: number }).c;
-    const tcCount = (db.prepare('SELECT COUNT(*) as c FROM test_cases').get() as { c: number }).c;
-    const execCount = (db.prepare('SELECT COUNT(*) as c FROM executions').get() as { c: number }).c;
-    const activityCount = (db.prepare('SELECT COUNT(*) as c FROM activity_log').get() as { c: number }).c;
+    const moduleRow = (await db.prepare('SELECT COUNT(*) as c FROM modules').get()) as { c: number } | undefined;
+    const featureRow = (await db.prepare('SELECT COUNT(*) as c FROM features').get()) as { c: number } | undefined;
+    const reqRow = (await db.prepare('SELECT COUNT(*) as c FROM requirements').get()) as { c: number } | undefined;
+    const tcRow = (await db.prepare('SELECT COUNT(*) as c FROM test_cases').get()) as { c: number } | undefined;
+    const execRow = (await db.prepare('SELECT COUNT(*) as c FROM executions').get()) as { c: number } | undefined;
+    const actRow = (await db.prepare('SELECT COUNT(*) as c FROM activity_log').get()) as { c: number } | undefined;
 
-    const dbPath = path.join(process.cwd(), 'data', 'qa-manager.db');
+    const moduleCount = moduleRow ? Number(moduleRow.c) : 0;
+    const featureCount = featureRow ? Number(featureRow.c) : 0;
+    const reqCount = reqRow ? Number(reqRow.c) : 0;
+    const tcCount = tcRow ? Number(tcRow.c) : 0;
+    const execCount = execRow ? Number(execRow.c) : 0;
+    const activityCount = actRow ? Number(actRow.c) : 0;
+
+    const isPg = Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('postgres'));
+    const dbPath = isPg ? 'PostgreSQL (Cloud / Remote)' : path.join(process.cwd(), 'data', 'qa-manager.db');
     let dbSize = 0;
-    if (fs.existsSync(dbPath)) {
-      dbSize = fs.statSync(dbPath).size;
+    if (!isPg) {
+      try {
+        if (fs.existsSync(dbPath)) {
+          dbSize = fs.statSync(dbPath).size;
+        }
+      } catch (e) {
+        // Ignore file stat errors on serverless
+      }
     }
 
     return NextResponse.json({
@@ -47,6 +61,7 @@ export async function GET(req: NextRequest) {
       },
       database: {
         path: dbPath,
+        type: isPg ? 'PostgreSQL' : 'SQLite',
         sizeBytes: dbSize,
         sizeKb: Math.round(dbSize / 1024),
         counts: {
@@ -76,26 +91,27 @@ export async function POST(req: NextRequest) {
     const { action } = body;
 
     if (action === 'seed_sample_data') {
-      const tcCount = (db.prepare('SELECT COUNT(*) as c FROM test_cases').get() as { c: number }).c;
+      const tcCountRow = (await db.prepare('SELECT COUNT(*) as c FROM test_cases').get()) as { c: number } | undefined;
+      const tcCount = tcCountRow ? Number(tcCountRow.c) : 0;
       if (tcCount > 0) {
         return NextResponse.json({ message: 'Database already has data. Reseeding is not required.' }, { status: 400 });
       }
 
       // Create Modules
-      const m1 = db.prepare(`INSERT INTO modules (name, description, prefix, status) VALUES (?, ?, ?, 'active')`)
+      const m1 = await db.prepare(`INSERT INTO modules (name, description, prefix, status) VALUES (?, ?, ?, 'active')`)
         .run('Authentication & Account', 'Authentication module, registration, forgot password, and user profile', 'AUTH');
-      const m2 = db.prepare(`INSERT INTO modules (name, description, prefix, status) VALUES (?, ?, ?, 'active')`)
+      const m2 = await db.prepare(`INSERT INTO modules (name, description, prefix, status) VALUES (?, ?, ?, 'active')`)
         .run('Transaction Management', 'Checkout module, payment, invoices, and order history', 'TRX');
 
       const m1Id = Number(m1.lastInsertRowid);
       const m2Id = Number(m2.lastInsertRowid);
 
       // Create Features
-      const f1 = db.prepare(`INSERT INTO features (module_id, name, description) VALUES (?, ?, ?)`)
+      const f1 = await db.prepare(`INSERT INTO features (module_id, name, description) VALUES (?, ?, ?)`)
         .run(m1Id, 'Login & Registration', 'User login and new account registration feature');
-      const f2 = db.prepare(`INSERT INTO features (module_id, name, description) VALUES (?, ?, ?)`)
+      const f2 = await db.prepare(`INSERT INTO features (module_id, name, description) VALUES (?, ?, ?)`)
         .run(m1Id, 'Reset Password', 'Password recovery feature via email OTP');
-      const f3 = db.prepare(`INSERT INTO features (module_id, name, description) VALUES (?, ?, ?)`)
+      const f3 = await db.prepare(`INSERT INTO features (module_id, name, description) VALUES (?, ?, ?)`)
         .run(m2Id, 'Payment Gateway', 'VA, QRIS, and Credit Card integration');
 
       const f1Id = Number(f1.lastInsertRowid);
@@ -103,25 +119,25 @@ export async function POST(req: NextRequest) {
       const f3Id = Number(f3.lastInsertRowid);
 
       // Create Requirements
-      const r1 = db.prepare(`
+      const r1 = await db.prepare(`
         INSERT INTO requirements (module_id, feature_id, ref_id, title, description, change_type, status, version)
         VALUES (?, ?, 'REQ-AUTH-001', 'User Login with Email & Password', 'The system must validate email format, verify encrypted password, limit to max 5 failed attempts before a 15-minute lockout, and issue a JWT token.', 'new', 'active', 1)
       `).run(m1Id, f1Id);
 
-      const r2 = db.prepare(`
+      const r2 = await db.prepare(`
         INSERT INTO requirements (module_id, feature_id, ref_id, title, description, change_type, status, version)
         VALUES (?, ?, 'REQ-AUTH-002', 'Forgot Password via Email OTP', 'The system sends a 6-digit OTP code valid for 5 minutes to the registered email. After successful OTP verification, the user can set a new password.', 'updated', 'active', 2)
       `).run(m1Id, f2Id);
 
-      const r3 = db.prepare(`
+      const r3 = await db.prepare(`
         INSERT INTO requirements (module_id, feature_id, ref_id, title, description, change_type, status, version)
         VALUES (?, ?, 'REQ-TRX-001', 'Static & Dynamic QRIS Payment', 'The system generates a QRIS code that expires in 15 minutes and handles payment completion webhook callbacks.', 'new', 'active', 1)
       `).run(m2Id, f3Id);
 
       // Create initial history for requirements
-      db.prepare(`INSERT INTO requirement_history (requirement_id, title, description, change_type, version) VALUES (?, ?, ?, 'new', 1)`)
+      await db.prepare(`INSERT INTO requirement_history (requirement_id, title, description, change_type, version) VALUES (?, ?, ?, 'new', 1)`)
         .run(Number(r1.lastInsertRowid), 'User Login', 'Initial requirement');
-      db.prepare(`INSERT INTO requirement_history (requirement_id, title, description, change_type, version) VALUES (?, ?, ?, 'updated', 2)`)
+      await db.prepare(`INSERT INTO requirement_history (requirement_id, title, description, change_type, version) VALUES (?, ?, ?, 'updated', 2)`)
         .run(Number(r2.lastInsertRowid), 'Forgot Password via Email OTP', 'Updated OTP duration from 10 minutes to 5 minutes');
 
       // Create Test Cases
@@ -211,7 +227,7 @@ export async function POST(req: NextRequest) {
       `);
 
       for (const tc of sampleCases) {
-        const res = stmtTc.run(
+        const res = await stmtTc.run(
           tc.case_id, tc.module_id, tc.feature_id, tc.requirement_ref, tc.title, tc.test_type,
           tc.preconditions, tc.test_steps, tc.test_data, tc.expected_result, tc.priority,
           tc.prep_status, tc.exec_status, tc.latest_result, tc.defect_ref || null, tc.notes || null
@@ -221,7 +237,7 @@ export async function POST(req: NextRequest) {
 
         // Add execution record if executed
         if (tc.exec_status === 'executed') {
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO executions (test_case_id, result, environment, actual_result, defect_ref, notes, is_retest)
             VALUES (?, ?, 'Staging Server', ?, ?, ?, 0)
           `).run(
@@ -234,11 +250,17 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Update sequences
-      db.prepare(`INSERT OR REPLACE INTO tc_sequence (module_prefix, next_seq) VALUES ('AUTH', 6)`).run();
-      db.prepare(`INSERT OR REPLACE INTO tc_sequence (module_prefix, next_seq) VALUES ('TRX', 4)`).run();
+      // Update sequences using standard PostgreSQL upsert
+      await db.prepare(`
+        INSERT INTO tc_sequence (module_prefix, next_seq) VALUES ('AUTH', 6)
+        ON CONFLICT(module_prefix) DO UPDATE SET next_seq = EXCLUDED.next_seq
+      `).run();
+      await db.prepare(`
+        INSERT INTO tc_sequence (module_prefix, next_seq) VALUES ('TRX', 4)
+        ON CONFLICT(module_prefix) DO UPDATE SET next_seq = EXCLUDED.next_seq
+      `).run();
 
-      logActivity(db, 'seed_data', 'system', null, 'SYSTEM', 'Sample QA data initialized (modules, requirements, test cases, executions)');
+      await logActivity(db, 'seed_data', 'system', null, 'SYSTEM', 'Sample QA data initialized (modules, requirements, test cases, executions)');
 
       return NextResponse.json({ success: true, message: 'Sample data initialized successfully!' });
     }

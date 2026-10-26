@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
     if (type === 'test-cases') {
-      const rows = db.prepare(`
+      const rows = ((await db.prepare(`
         SELECT tc.case_id, m.name as module, f.name as feature, tc.requirement_ref,
           tc.title, tc.test_type, tc.preconditions, tc.test_steps, tc.test_data,
           tc.expected_result, tc.actual_result, tc.priority, tc.prep_status,
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
         JOIN features f ON f.id = tc.feature_id
         ${where}
         ORDER BY tc.case_id
-      `).all(...params) as Record<string, unknown>[];
+      `).all(...params)) as Record<string, unknown>[]) || [];
 
       const csv = toCSV(rows);
       return new NextResponse(csv, {
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (type === 'executions') {
-      const rows = db.prepare(`
+      const rows = ((await db.prepare(`
         SELECT tc.case_id, m.name as module, f.name as feature, tc.title,
           e.exec_date, e.environment, e.result, e.actual_result, e.defect_ref, e.notes, e.is_retest
         FROM executions e
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
         JOIN modules m ON m.id = tc.module_id
         JOIN features f ON f.id = tc.feature_id
         ORDER BY e.exec_date DESC
-      `).all() as Record<string, unknown>[];
+      `).all()) as Record<string, unknown>[]) || [];
 
       const csv = toCSV(rows);
       return new NextResponse(csv, {
@@ -108,11 +108,11 @@ export async function GET(req: NextRequest) {
     }
 
     if (type === 'change-log') {
-      const rows = db.prepare(`
+      const rows = ((await db.prepare(`
         SELECT entity_type, entity_id, entity_ref, change_type, changed_fields, 
           old_values, new_values, reason, requirement_ref, changed_at
         FROM change_log ORDER BY changed_at DESC
-      `).all() as Record<string, unknown>[];
+      `).all()) as Record<string, unknown>[]) || [];
 
       const csv = toCSV(rows);
       return new NextResponse(csv, {

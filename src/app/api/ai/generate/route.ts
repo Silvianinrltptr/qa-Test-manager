@@ -21,8 +21,8 @@ export async function POST(req: NextRequest) {
     const selectedLang = isIndonesian ? 'Bahasa Indonesia' : 'English';
 
     // Fetch module/feature info for context
-    const moduleData = module_id ? db.prepare('SELECT * FROM modules WHERE id = ?').get(Number(module_id)) as { name: string; prefix: string } : null;
-    const feature = feature_id ? db.prepare('SELECT * FROM features WHERE id = ?').get(Number(feature_id)) as { name: string } : null;
+    const moduleData = module_id ? ((await db.prepare('SELECT * FROM modules WHERE id = ?').get(Number(module_id))) as { name: string; prefix: string } | undefined) : null;
+    const feature = feature_id ? ((await db.prepare('SELECT * FROM features WHERE id = ?').get(Number(feature_id))) as { name: string } | undefined) : null;
 
     const languagePrompt = isIndonesian
       ? `LANGUAGE REQUIREMENT: Bahasa Indonesia
@@ -195,10 +195,10 @@ Generate comprehensive test cases for the requirement above in ${selectedLang} f
     }
 
     // Check for duplicates against existing test cases
-    const existingCases = db.prepare(`
+    const existingCases = ((await db.prepare(`
       SELECT title, test_type FROM test_cases 
       WHERE module_id = ? AND feature_id = ? AND lifecycle_status = 'active'
-    `).all(Number(module_id), Number(feature_id)) as { title: string; test_type: string }[];
+    `).all(Number(module_id), Number(feature_id))) as { title: string; test_type: string }[]) || [];
 
     interface AiDraftItem {
       title?: string;
@@ -221,7 +221,7 @@ Generate comprehensive test cases for the requirement above in ${selectedLang} f
 
     // Save session in DB
     if (session_id) {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO ai_drafts (session_id, module_id, feature_id, draft_data, status)
         VALUES (?, ?, ?, ?, 'pending')
       `).run(session_id, Number(module_id), Number(feature_id), JSON.stringify(draftsWithDupeCheck));

@@ -30,7 +30,10 @@ export default function AIGeneratorPage() {
   const [tab, setTab] = useState<'paste' | 'file'>('paste');
 
   useEffect(() => {
-    fetch('/api/modules').then(r => r.json()).then(setModules);
+    fetch('/api/modules')
+      .then(r => r.json())
+      .then(d => setModules(Array.isArray(d) ? d : []))
+      .catch(() => setModules([]));
     fetch('/api/settings').then(r => r.json()).then(data => {
       if (data?.ai) {
         const geminiOk = Boolean(data.ai.gemini?.configured ?? data.ai.configured);
@@ -43,10 +46,16 @@ export default function AIGeneratorPage() {
     });
   }, []);
 
-  const filteredFeatures = features.filter(f => f.module_id === Number(moduleId));
+  const safeFeatures = Array.isArray(features) ? features : [];
+  const filteredFeatures = safeFeatures.filter(f => f.module_id === Number(moduleId));
 
   useEffect(() => {
-    if (moduleId) fetch(`/api/features?moduleId=${moduleId}`).then(r => r.json()).then(setFeatures);
+    if (moduleId) {
+      fetch(`/api/features?moduleId=${moduleId}`)
+        .then(r => r.json())
+        .then(d => setFeatures(Array.isArray(d) ? d : []))
+        .catch(() => setFeatures([]));
+    }
   }, [moduleId]);
 
   const handleFile = async (file: File) => {

@@ -14,13 +14,13 @@ export async function GET(req: NextRequest) {
     }
 
     const db = getDb();
-    const comments = db.prepare(`
+    const comments = (await db.prepare(`
       SELECT * FROM test_case_comments 
       WHERE test_case_id = ? 
       ORDER BY created_at ASC
-    `).all(Number(testCaseId)) as TestCaseComment[];
+    `).all(Number(testCaseId))) as TestCaseComment[];
 
-    return NextResponse.json(comments);
+    return NextResponse.json(comments || []);
   } catch (error) {
     console.error('Comments GET error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     const { errorResponse } = await requireAuth(req, ['qa', 'dev_pm']);
     if (errorResponse) return errorResponse;
 
-    const body = await req.json() as {
+    const body = (await req.json()) as {
       test_case_id?: number;
       author_name?: string;
       author_role?: string;
@@ -50,10 +50,10 @@ export async function POST(req: NextRequest) {
       INSERT INTO test_case_comments (test_case_id, author_name, author_role, content, status)
       VALUES (?, ?, ?, ?, 'pending')
     `);
-    const info = stmt.run(Number(test_case_id), author_name.trim(), author_role, content.trim());
+    const info = await stmt.run(Number(test_case_id), author_name.trim(), author_role, content.trim());
 
     // Activity log entry
-    logActivity(
+    await logActivity(
       db,
       'comment_created',
       'test_case',
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       `Feedback comment submitted by ${author_name.trim()} (${author_role})`
     );
 
-    const created = db.prepare('SELECT * FROM test_case_comments WHERE id = ?').get(info.lastInsertRowid) as TestCaseComment;
+    const created = (await db.prepare('SELECT * FROM test_case_comments WHERE id = ?').get(info.lastInsertRowid)) as TestCaseComment;
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
     console.error('Comments POST error:', error);

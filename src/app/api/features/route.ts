@@ -28,11 +28,12 @@ export async function GET(req: NextRequest) {
     if (!includeArchived) conditions.push("f.status = 'active'");
 
     if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
-    query += ' GROUP BY f.id ORDER BY m.name, f.name';
+    query += ' GROUP BY f.id, m.name, m.prefix ORDER BY m.name, f.name';
 
-    return NextResponse.json(db.prepare(query).all(...params));
+    const rows = await db.prepare(query).all(...params);
+    return NextResponse.json(rows);
   } catch (error) {
-    console.error(error);
+    console.error('Features GET error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -50,29 +51,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Module and feature name are required' }, { status: 400 });
     }
 
-    const mod = db.prepare('SELECT * FROM modules WHERE id = ?').get(Number(module_id)) as { prefix: string } | undefined;
+    const mod = (await db.prepare('SELECT * FROM modules WHERE id = ?').get(Number(module_id))) as { prefix: string } | undefined;
     if (!mod) return NextResponse.json({ error: 'Module not found' }, { status: 404 });
 
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO features (module_id, name, description, status)
       VALUES (?, ?, ?, 'active')
     `).run(Number(module_id), name.trim(), description?.trim() || null);
 
     const featureId = result.lastInsertRowid as number;
-    logActivity(db, 'created', 'feature', featureId, name.trim(), `Feature "${name}" created in module ${mod.prefix}`);
-    logChange(db, {
+    await logActivity(db, 'created', 'feature', featureId, name.trim(), `Feature "${name}" created in module ${mod.prefix}`);
+    await logChange(db, {
       entityType: 'feature', entityId: featureId, entityRef: name.trim(),
       changeType: 'created', newValues: body
     });
 
-    const feature = db.prepare(`
+    const feature = await db.prepare(`
       SELECT f.*, m.name as module_name, m.prefix as module_prefix
       FROM features f JOIN modules m ON m.id = f.module_id
       WHERE f.id = ?
     `).get(featureId);
     return NextResponse.json(feature, { status: 201 });
   } catch (error) {
-    console.error(error);
+    console.error('Features POST error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

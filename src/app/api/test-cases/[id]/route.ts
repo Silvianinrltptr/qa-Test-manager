@@ -10,7 +10,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/api/test-cases/[
     const db = getDb();
     const { id } = await ctx.params;
 
-    const tc = db.prepare(`
+    const tc = await db.prepare(`
       SELECT tc.*, m.name as module_name, m.prefix as module_prefix, f.name as feature_name
       FROM test_cases tc
       JOIN modules m ON m.id = tc.module_id
@@ -20,19 +20,19 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/api/test-cases/[
 
     if (!tc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const executions = db.prepare(`
+    const executions = await db.prepare(`
       SELECT * FROM executions WHERE test_case_id = ? ORDER BY exec_date DESC
     `).all(Number(id));
 
-    const changes = db.prepare(`
+    const changes = await db.prepare(`
       SELECT * FROM change_log WHERE entity_type = 'test_case' AND entity_id = ? ORDER BY changed_at DESC
     `).all(Number(id));
 
-    const comments = db.prepare(`
+    const comments = await db.prepare(`
       SELECT * FROM test_case_comments WHERE test_case_id = ? ORDER BY created_at ASC
     `).all(Number(id));
 
-    return NextResponse.json({ testCase: tc, executions, changes, comments });
+    return NextResponse.json({ testCase: tc, executions: executions || [], changes: changes || [], comments: comments || [] });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -48,7 +48,7 @@ export async function PUT(req: NextRequest, ctx: RouteContext<'/api/test-cases/[
     const { id } = await ctx.params;
     const body = await req.json();
 
-    const old = db.prepare('SELECT * FROM test_cases WHERE id = ?').get(Number(id)) as Record<string, unknown> | undefined;
+    const old = (await db.prepare('SELECT * FROM test_cases WHERE id = ?').get(Number(id))) as Record<string, unknown> | undefined;
     if (!old) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const fields = [
@@ -79,7 +79,7 @@ export async function PUT(req: NextRequest, ctx: RouteContext<'/api/test-cases/[
     if (updates.length > 0) {
       updates.push('updated_at = CURRENT_TIMESTAMP');
       values.push(Number(id));
-      db.prepare(`UPDATE test_cases SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+      await db.prepare(`UPDATE test_cases SET ${updates.join(', ')} WHERE id = ?`).run(...values);
     }
 
     // Track lifecycle changes
@@ -89,22 +89,22 @@ export async function PUT(req: NextRequest, ctx: RouteContext<'/api/test-cases/[
         : body.lifecycle_status === 'archived' ? 'archived'
         : 'lifecycle_changed';
       
-      logChange(db, {
+      await logChange(db, {
         entityType: 'test_case', entityId: Number(id), entityRef: old.case_id as string,
         changeType, changedFields: changedFields.join(', '),
         oldValues: oldVals, newValues: newVals, reason: body.reason
       });
     } else if (changedFields.length > 0) {
-      logChange(db, {
+      await logChange(db, {
         entityType: 'test_case', entityId: Number(id), entityRef: old.case_id as string,
         changeType: 'updated', changedFields: changedFields.join(', '),
         oldValues: oldVals, newValues: newVals, reason: body.reason
       });
     }
 
-    logActivity(db, 'updated', 'test_case', Number(id), old.case_id as string, `Test case "${old.title}" updated`);
+    await logActivity(db, 'updated', 'test_case', Number(id), old.case_id as string, `Test case "${old.title}" updated`);
 
-    const updated = db.prepare(`
+    const updated = await db.prepare(`
       SELECT tc.*, m.name as module_name, m.prefix as module_prefix, f.name as feature_name
       FROM test_cases tc
       JOIN modules m ON m.id = tc.module_id
@@ -127,13 +127,13 @@ export async function DELETE(req: NextRequest, ctx: RouteContext<'/api/test-case
     const db = getDb();
     const { id } = await ctx.params;
 
-    const tc = db.prepare('SELECT * FROM test_cases WHERE id = ?').get(Number(id)) as { case_id: string; title: string; lifecycle_status: string } | undefined;
+    const tc = (await db.prepare('SELECT * FROM test_cases WHERE id = ?').get(Number(id))) as { case_id: string; title: string; lifecycle_status: string } | undefined;
     if (!tc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     // Soft delete - mark as archived
-    db.prepare(`UPDATE test_cases SET lifecycle_status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(Number(id));
-    logActivity(db, 'archived', 'test_case', Number(id), tc.case_id, `Test case "${tc.title}" archived`);
-    logChange(db, {
+    await db.prepare(`UPDATE test_cases SET lifecycle_status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(Number(id));
+    await logActivity(db, 'archived', 'test_case', Number(id), tc.case_id, `Test case "${tc.title}" archived`);
+    await logChange(db, {
       entityType: 'test_case', entityId: Number(id), entityRef: tc.case_id,
       changeType: 'archived', oldValues: { lifecycle_status: tc.lifecycle_status }
     });

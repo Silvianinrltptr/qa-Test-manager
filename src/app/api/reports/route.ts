@@ -42,21 +42,27 @@ export async function GET(req: NextRequest) {
     }
 
     // 1. Current totals (Current State)
-    const currentActive = (db.prepare(`
+    const activeRow = (await db.prepare(`
       SELECT COUNT(*) as count FROM test_cases WHERE lifecycle_status = 'active'
-    `).get() as { count: number }).count;
+    `).get()) as { count: number } | undefined;
+    const currentActive = activeRow ? Number(activeRow.count) : 0;
 
-    const currentReady = (db.prepare(`
+    const readyRow = (await db.prepare(`
       SELECT COUNT(*) as count FROM test_cases WHERE lifecycle_status = 'active' AND prep_status = 'ready'
-    `).get() as { count: number }).count;
+    `).get()) as { count: number } | undefined;
+    const currentReady = readyRow ? Number(readyRow.count) : 0;
 
-    const currentObsolete = (db.prepare(`
+    const obsoleteRow = (await db.prepare(`
       SELECT COUNT(*) as count FROM test_cases WHERE lifecycle_status = 'obsolete'
-    `).get() as { count: number }).count;
+    `).get()) as { count: number } | undefined;
+    const currentObsolete = obsoleteRow ? Number(obsoleteRow.count) : 0;
 
     // 2. Executions during selected period
-    const execConditions: string[] = ['DATE(e.exec_date) >= DATE(?)', 'DATE(e.exec_date) <= DATE(?)'];
-    const execParams: (string | number)[] = [startDate, endDate];
+    const startIso = `${startDate} 00:00:00`;
+    const endIso = `${endDate} 23:59:59`;
+
+    const execConditions: string[] = ['e.exec_date >= ?', 'e.exec_date <= ?'];
+    const execParams: (string | number | Date)[] = [new Date(startIso), new Date(endIso)];
 
     if (moduleId) {
       execConditions.push('tc.module_id = ?');
@@ -69,7 +75,7 @@ export async function GET(req: NextRequest) {
 
     const execWhere = 'WHERE ' + execConditions.join(' AND ');
 
-    const periodExecutions = db.prepare(`
+    const periodExecutions = ((await db.prepare(`
       SELECT e.*, tc.case_id, tc.title, tc.priority, tc.test_type,
              m.name as module_name, f.name as feature_name
       FROM executions e
@@ -78,23 +84,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN features f ON f.id = tc.feature_id
       ${execWhere}
       ORDER BY e.exec_date DESC
-    `).all(...execParams) as {
-      id: number;
-      test_case_id: number;
-      exec_date: string;
-      environment: string | null;
-      actual_result: string | null;
-      result: string;
-      defect_ref: string | null;
-      notes: string | null;
-      is_retest: number;
-      case_id: string;
-      title: string;
-      priority: string;
-      requirement_ref: string | null;
-      module_name: string | null;
-      feature_name: string | null;
-    }[];
+    `).all(...execParams)) as any[]) || [];
 
     // Calculate period results
     let passCount = 0;
@@ -114,15 +104,15 @@ export async function GET(req: NextRequest) {
     const periodPassRate = evaluatedTotal > 0 ? Math.round((passCount / evaluatedTotal) * 100) : null;
 
     // 3. Changes during period (from change_log)
-    const changeStats = db.prepare(`
+    const changeStats = (await db.prepare(`
       SELECT
-        SUM(CASE WHEN change_type = 'created' AND entity_type = 'test_case' THEN 1 ELSE 0 END) as tc_created,
-        SUM(CASE WHEN change_type = 'updated' AND entity_type = 'test_case' THEN 1 ELSE 0 END) as tc_updated,
-        SUM(CASE WHEN change_type = 'obsolete' AND entity_type = 'test_case' THEN 1 ELSE 0 END) as tc_obsolete,
-        SUM(CASE WHEN entity_type = 'requirement' THEN 1 ELSE 0 END) as req_changes
+        COUNT(CASE WHEN change_type = 'created' AND entity_type = 'test_case' THEN 1 END) as tc_created,
+        COUNT(CASE WHEN change_type = 'updated' AND entity_type = 'test_case' THEN 1 END) as tc_updated,
+        COUNT(CASE WHEN change_type = 'obsolete' AND entity_type = 'test_case' THEN 1 END) as tc_obsolete,
+        COUNT(CASE WHEN entity_type = 'requirement' THEN 1 END) as req_changes
       FROM change_log
-      WHERE DATE(changed_at) >= DATE(?) AND DATE(changed_at) <= DATE(?)
-    `).get(startDate, endDate) as {
+      WHERE changed_at >= ? AND changed_at <= ?
+    `).get(new Date(startIso), new Date(endIso))) as {
       tc_created: number | null;
       tc_updated: number | null;
       tc_obsolete: number | null;
@@ -131,7 +121,7 @@ export async function GET(req: NextRequest) {
 
     // 4. Defects reported during period
     const defects = periodExecutions
-      .filter(e => e.defect_ref && e.defect_ref.trim() !== '')
+      .filter(e => e.defect_ref && String(e.defect_ref).trim() !== '')
       .map(e => ({
         defect_ref: e.defect_ref,
         case_id: e.case_id,
@@ -172,10 +162,10 @@ export async function GET(req: NextRequest) {
         blocked: blockedCount,
         passRate: periodPassRate,
         retests: retestCount,
-        tcCreated: changeStats?.tc_created || 0,
-        tcUpdated: changeStats?.tc_updated || 0,
-        tcObsolete: changeStats?.tc_obsolete || 0,
-        reqChanges: changeStats?.req_changes || 0,
+        tcCreated: Number(changeStats?.tc_created) || 0,
+        tcUpdated: Number(changeStats?.tc_updated) || 0,
+        tcObsolete: Number(changeStats?.tc_obsolete) || 0,
+        reqChanges: Number(changeStats?.req_changes) || 0,
       },
       byModule: Object.values(byModuleMap),
       defects,

@@ -99,16 +99,21 @@ export default function RequirementsPage() {
   };
 
   useEffect(() => {
-    fetch('/api/modules').then(r => r.json()).then(setModules);
-    fetch('/api/features').then(r => r.json()).then(setFeatures);
+    fetch('/api/modules')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setModules(data); });
+    fetch('/api/features')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setFeatures(data); });
   }, []);
 
   useEffect(() => {
     fetchRequirements();
   }, [filters]);
 
-  const filteredFeatures = features.filter(f => !filters.moduleId || f.module_id === Number(filters.moduleId));
-  const createFormFeatures = features.filter(f => !createForm.module_id || f.module_id === Number(createForm.module_id));
+  const safeFeatures = Array.isArray(features) ? features : [];
+  const filteredFeatures = safeFeatures.filter(f => !filters.moduleId || f.module_id === Number(filters.moduleId));
+  const createFormFeatures = safeFeatures.filter(f => !createForm.module_id || f.module_id === Number(createForm.module_id));
 
   const handleOpenCreate = () => {
     setCreateForm({

@@ -85,15 +85,17 @@ export default function ProjectViewerPage() {
       ]);
       if (casesRes.ok) {
         const casesData = await casesRes.json();
-        if (casesData?.data) setTestCases(casesData.data as TestCase[]);
+        if (casesData && Array.isArray(casesData.data)) {
+          setTestCases(casesData.data as TestCase[]);
+        }
       }
       if (modulesRes.ok) {
         const modulesData = await modulesRes.json();
-        if (modulesData) setModules(modulesData as Module[]);
+        if (Array.isArray(modulesData)) setModules(modulesData as Module[]);
       }
       if (dashRes.ok) {
         const dashData = await dashRes.json();
-        if (dashData) setDashboardMetrics(dashData as DashboardMetrics);
+        if (dashData && !dashData.error) setDashboardMetrics(dashData as DashboardMetrics);
       }
       toast.success('Dashboard data refreshed');
     } catch {
@@ -112,13 +114,13 @@ export default function ProjectViewerPage() {
     ])
       .then(([casesData, modulesData, dashData]) => {
         if (!ignore) {
-          if (casesData && casesData.data) {
+          if (casesData && Array.isArray(casesData.data)) {
             setTestCases(casesData.data as TestCase[]);
           }
-          if (modulesData) {
+          if (Array.isArray(modulesData)) {
             setModules(modulesData as Module[]);
           }
-          if (dashData) {
+          if (dashData && !dashData.error) {
             setDashboardMetrics(dashData as DashboardMetrics);
           }
           setLoading(false);

@@ -48,7 +48,10 @@ export default function ImportPage() {
   const [modules, setModules] = useState<Module[]>([]);
 
   useEffect(() => {
-    fetch('/api/modules').then(r => r.json()).then(setModules);
+    fetch('/api/modules')
+      .then(r => r.json())
+      .then(d => setModules(Array.isArray(d) ? d : []))
+      .catch(() => setModules([]));
   }, []);
 
   const handleFile = async (file: File) => {

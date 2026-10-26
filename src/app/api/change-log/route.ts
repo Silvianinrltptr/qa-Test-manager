@@ -25,10 +25,11 @@ export async function GET(req: NextRequest) {
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
-    const total = (db.prepare(`SELECT COUNT(*) as count FROM change_log ${where}`).get(...params) as { count: number }).count;
-    const logs = db.prepare(`SELECT * FROM change_log ${where} ORDER BY changed_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
+    const totalRow = (await db.prepare(`SELECT COUNT(*) as count FROM change_log ${where}`).get(...params)) as { count: number } | undefined;
+    const total = totalRow ? Number(totalRow.count) : 0;
+    const logs = await db.prepare(`SELECT * FROM change_log ${where} ORDER BY changed_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
 
-    return NextResponse.json({ data: logs, pagination: { total, page, limit, totalPages: Math.ceil(total / limit) } });
+    return NextResponse.json({ data: logs || [], pagination: { total, page, limit, totalPages: Math.ceil(total / limit) || 1 } });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

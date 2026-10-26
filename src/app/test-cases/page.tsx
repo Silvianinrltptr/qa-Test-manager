@@ -86,14 +86,21 @@ export default function TestCasesPage() {
   }, [filters, sortBy, sortDir, pagination.limit]);
 
   useEffect(() => {
-    fetch('/api/modules').then(r => r.json()).then(setModules);
-    fetch('/api/features').then(r => r.json()).then(setFeatures);
+    fetch('/api/modules')
+      .then(r => r.json())
+      .then(d => setModules(Array.isArray(d) ? d : []))
+      .catch(() => setModules([]));
+    fetch('/api/features')
+      .then(r => r.json())
+      .then(d => setFeatures(Array.isArray(d) ? d : []))
+      .catch(() => setFeatures([]));
   }, []);
 
   useEffect(() => { fetchData(1); }, [filters, sortBy, sortDir]);
 
-  const filteredFeatures = features.filter(f => !filters.moduleId || f.module_id === Number(filters.moduleId));
-  const formFeatures = features.filter(f => !form.module_id || f.module_id === Number(form.module_id));
+  const safeFeatures = Array.isArray(features) ? features : [];
+  const filteredFeatures = safeFeatures.filter(f => !filters.moduleId || f.module_id === Number(filters.moduleId));
+  const formFeatures = safeFeatures.filter(f => !form.module_id || f.module_id === Number(form.module_id));
 
   const handleSort = (col: string) => {
     if (sortBy === col) setSortDir(d => d === 'ASC' ? 'DESC' : 'ASC');

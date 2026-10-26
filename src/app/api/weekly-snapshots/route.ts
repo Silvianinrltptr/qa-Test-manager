@@ -15,10 +15,11 @@ export async function GET(req: NextRequest) {
     const limit = Number(searchParams.get('limit') ?? '10');
     const offset = (page - 1) * limit;
 
-    const total = (db.prepare('SELECT COUNT(*) as count FROM weekly_snapshots').get() as { count: number }).count;
-    const snapshots = db.prepare('SELECT * FROM weekly_snapshots ORDER BY week_start DESC LIMIT ? OFFSET ?').all(limit, offset);
+    const totalRow = (await db.prepare('SELECT COUNT(*) as count FROM weekly_snapshots').get()) as { count: number } | undefined;
+    const total = totalRow ? Number(totalRow.count) : 0;
+    const snapshots = await db.prepare('SELECT * FROM weekly_snapshots ORDER BY week_start DESC LIMIT ? OFFSET ?').all(limit, offset);
 
-    return NextResponse.json({ data: snapshots, pagination: { total, page, limit, totalPages: Math.ceil(total / limit) } });
+    return NextResponse.json({ data: snapshots || [], pagination: { total, page, limit, totalPages: Math.ceil(total / limit) || 1 } });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -39,65 +40,67 @@ export async function POST(req: NextRequest) {
     }
 
     // Calculate live snapshot data
-    const totalActive = (db.prepare(`SELECT COUNT(*) as count FROM test_cases WHERE lifecycle_status = 'active'`).get() as { count: number }).count;
+    const totalActiveRow = (await db.prepare(`SELECT COUNT(*) as count FROM test_cases WHERE lifecycle_status = 'active'`).get()) as { count: number } | undefined;
+    const totalActive = totalActiveRow ? Number(totalActiveRow.count) : 0;
 
-    const prepRow = db.prepare(`
-      SELECT SUM(CASE WHEN prep_status = 'ready' THEN 1 ELSE 0 END) as ready, COUNT(*) as total
+    const prepRow = ((await db.prepare(`
+      SELECT COUNT(CASE WHEN prep_status = 'ready' THEN 1 END) as ready, COUNT(*) as total
       FROM test_cases WHERE lifecycle_status = 'active'
-    `).get() as { ready: number; total: number };
+    `).get()) as { ready: number; total: number } | undefined) || { ready: 0, total: 0 };
 
-    const execRow = db.prepare(`
-      SELECT SUM(CASE WHEN exec_status = 'executed' THEN 1 ELSE 0 END) as executed, COUNT(*) as ready_total
+    const execRow = ((await db.prepare(`
+      SELECT COUNT(CASE WHEN exec_status = 'executed' THEN 1 END) as executed, COUNT(*) as ready_total
       FROM test_cases WHERE lifecycle_status = 'active' AND prep_status = 'ready'
-    `).get() as { executed: number; ready_total: number };
+    `).get()) as { executed: number; ready_total: number } | undefined) || { executed: 0, ready_total: 0 };
 
-    const results = db.prepare(`
+    const results = ((await db.prepare(`
       SELECT
-        SUM(CASE WHEN latest_result = 'pass' THEN 1 ELSE 0 END) as pass,
-        SUM(CASE WHEN latest_result = 'fail' THEN 1 ELSE 0 END) as fail,
-        SUM(CASE WHEN latest_result = 'blocked' THEN 1 ELSE 0 END) as blocked,
-        SUM(CASE WHEN latest_result = 'not_run' THEN 1 ELSE 0 END) as not_run
+        COUNT(CASE WHEN latest_result = 'pass' THEN 1 END) as pass,
+        COUNT(CASE WHEN latest_result = 'fail' THEN 1 END) as fail,
+        COUNT(CASE WHEN latest_result = 'blocked' THEN 1 END) as blocked,
+        COUNT(CASE WHEN latest_result = 'not_run' THEN 1 END) as not_run
       FROM test_cases WHERE lifecycle_status = 'active'
-    `).get() as { pass: number; fail: number; blocked: number; not_run: number };
+    `).get()) as { pass: number; fail: number; blocked: number; not_run: number } | undefined) || { pass: 0, fail: 0, blocked: 0, not_run: 0 };
 
-    const weeklyChanges = db.prepare(`
+    const weeklyChanges = ((await db.prepare(`
       SELECT
-        SUM(CASE WHEN change_type = 'created' THEN 1 ELSE 0 END) as added,
-        SUM(CASE WHEN change_type = 'updated' THEN 1 ELSE 0 END) as updated,
-        SUM(CASE WHEN change_type = 'obsolete' THEN 1 ELSE 0 END) as obsolete,
-        SUM(CASE WHEN change_type = 'reactivated' THEN 1 ELSE 0 END) as reactivated
+        COUNT(CASE WHEN change_type = 'created' THEN 1 END) as added,
+        COUNT(CASE WHEN change_type = 'updated' THEN 1 END) as updated,
+        COUNT(CASE WHEN change_type = 'obsolete' THEN 1 END) as obsolete,
+        COUNT(CASE WHEN change_type = 'reactivated' THEN 1 END) as reactivated
       FROM change_log
       WHERE entity_type = 'test_case' AND changed_at BETWEEN ? AND ?
-    `).get(week_start, week_end) as { added: number; updated: number; obsolete: number; reactivated: number };
+    `).get(new Date(week_start), new Date(week_end))) as { added: number; updated: number; obsolete: number; reactivated: number } | undefined) || { added: 0, updated: 0, obsolete: 0, reactivated: 0 };
 
-    const execDuringWeek = (db.prepare(`
+    const execDuringWeekRow = (await db.prepare(`
       SELECT COUNT(*) as count FROM executions WHERE exec_date BETWEEN ? AND ?
-    `).get(week_start, week_end) as { count: number }).count;
+    `).get(new Date(week_start), new Date(week_end))) as { count: number } | undefined;
+    const execDuringWeek = execDuringWeekRow ? Number(execDuringWeekRow.count) : 0;
 
-    const passTotal = (results.pass || 0) + (results.fail || 0);
+    const passTotal = (Number(results.pass) || 0) + (Number(results.fail) || 0);
 
     const snapshotData = {
       totalActive,
       prepProgress: {
-        ready: prepRow.ready || 0, total: prepRow.total || 0,
-        pct: prepRow.total > 0 ? Math.round(((prepRow.ready || 0) / prepRow.total) * 100) : null
+        ready: Number(prepRow.ready) || 0, total: Number(prepRow.total) || 0,
+        pct: Number(prepRow.total) > 0 ? Math.round(((Number(prepRow.ready) || 0) / Number(prepRow.total)) * 100) : null
       },
       execProgress: {
-        executed: execRow.executed || 0, readyTotal: execRow.ready_total || 0,
-        pct: execRow.ready_total > 0 ? Math.round(((execRow.executed || 0) / execRow.ready_total) * 100) : null
+        executed: Number(execRow.executed) || 0, readyTotal: Number(execRow.ready_total) || 0,
+        pct: Number(execRow.ready_total) > 0 ? Math.round(((Number(execRow.executed) || 0) / Number(execRow.ready_total)) * 100) : null
       },
-      results: { pass: results.pass || 0, fail: results.fail || 0, blocked: results.blocked || 0, not_run: results.not_run || 0 },
-      passRate: { pass: results.pass || 0, total: passTotal, pct: passTotal > 0 ? Math.round(((results.pass || 0) / passTotal) * 100) : null },
-      weeklyChanges: { added: weeklyChanges.added || 0, updated: weeklyChanges.updated || 0, obsolete: weeklyChanges.obsolete || 0, reactivated: weeklyChanges.reactivated || 0 },
+      results: { pass: Number(results.pass) || 0, fail: Number(results.fail) || 0, blocked: Number(results.blocked) || 0, not_run: Number(results.not_run) || 0 },
+      passRate: { pass: Number(results.pass) || 0, total: passTotal, pct: passTotal > 0 ? Math.round(((Number(results.pass) || 0) / passTotal) * 100) : null },
+      weeklyChanges: { added: Number(weeklyChanges.added) || 0, updated: Number(weeklyChanges.updated) || 0, obsolete: Number(weeklyChanges.obsolete) || 0, reactivated: Number(weeklyChanges.reactivated) || 0 },
       execDuringWeek,
     };
 
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO weekly_snapshots (week_start, week_end, snapshot_data, notes, activities, next_priorities)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(week_start, week_end, JSON.stringify(snapshotData), notes || null, activities || null, next_priorities || null);
+    `).run(new Date(week_start), new Date(week_end), JSON.stringify(snapshotData), notes || null, activities || null, next_priorities || null);
 
-    const snapshot = db.prepare('SELECT * FROM weekly_snapshots WHERE id = ?').get(result.lastInsertRowid);
+    const snapshot = await db.prepare('SELECT * FROM weekly_snapshots WHERE id = ?').get(result.lastInsertRowid);
     return NextResponse.json(snapshot, { status: 201 });
   } catch (error) {
     console.error(error);

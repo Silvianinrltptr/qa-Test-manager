@@ -91,7 +91,10 @@ export default function TraceabilityPage() {
   };
 
   useEffect(() => {
-    fetch('/api/modules').then(r => r.json()).then(setModules);
+    fetch('/api/modules')
+      .then(r => r.json())
+      .then(d => setModules(Array.isArray(d) ? d : []))
+      .catch(() => setModules([]));
   }, []);
 
   useEffect(() => {

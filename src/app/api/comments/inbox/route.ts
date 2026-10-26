@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
 
     const db = getDb();
 
-    const comments = db.prepare(`
+    const comments = (await db.prepare(`
       SELECT 
         c.id,
         c.test_case_id,
@@ -32,16 +32,16 @@ export async function GET(req: NextRequest) {
       LEFT JOIN modules m ON tc.module_id = m.id
       LEFT JOIN features f ON tc.feature_id = f.id
       ORDER BY c.created_at DESC
-    `).all() as TestCaseComment[];
+    `).all()) as TestCaseComment[];
 
-    const statsRow = db.prepare(`
+    const statsRow = (await db.prepare(`
       SELECT
         COUNT(*) AS total,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
-        SUM(CASE WHEN status = 'reviewed' THEN 1 ELSE 0 END) AS reviewed,
-        SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved
+        COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending,
+        COUNT(CASE WHEN status = 'reviewed' THEN 1 END) AS reviewed,
+        COUNT(CASE WHEN status = 'resolved' THEN 1 END) AS resolved
       FROM test_case_comments
-    `).get() as {
+    `).get()) as {
       total: number;
       pending: number | null;
       reviewed: number | null;
@@ -49,14 +49,14 @@ export async function GET(req: NextRequest) {
     } | undefined;
 
     const stats: FeedbackInboxStats = {
-      total: statsRow?.total || 0,
-      pending: statsRow?.pending || 0,
-      reviewed: statsRow?.reviewed || 0,
-      resolved: statsRow?.resolved || 0,
+      total: Number(statsRow?.total) || 0,
+      pending: Number(statsRow?.pending) || 0,
+      reviewed: Number(statsRow?.reviewed) || 0,
+      resolved: Number(statsRow?.resolved) || 0,
     };
 
     return NextResponse.json({
-      comments,
+      comments: comments || [],
       stats,
     });
   } catch (error) {

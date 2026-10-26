@@ -40,13 +40,20 @@ export default function ExecutionPage() {
   };
 
   useEffect(() => {
-    fetch('/api/modules').then(r => r.json()).then(setModules);
-    fetch('/api/features').then(r => r.json()).then(setFeatures);
+    fetch('/api/modules')
+      .then(r => r.json())
+      .then(d => setModules(Array.isArray(d) ? d : []))
+      .catch(() => setModules([]));
+    fetch('/api/features')
+      .then(r => r.json())
+      .then(d => setFeatures(Array.isArray(d) ? d : []))
+      .catch(() => setFeatures([]));
   }, []);
 
   useEffect(() => { fetchData(1); }, [filters]);
 
-  const filteredFeatures = features.filter(f => !filters.moduleId || f.module_id === Number(filters.moduleId));
+  const safeFeatures = Array.isArray(features) ? features : [];
+  const filteredFeatures = safeFeatures.filter(f => !filters.moduleId || f.module_id === Number(filters.moduleId));
 
   const openExec = (tc: TestCase) => {
     setExecCase(tc);

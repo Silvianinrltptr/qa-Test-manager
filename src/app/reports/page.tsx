@@ -88,8 +88,14 @@ export default function ReportsPage() {
 
   // Fetch modules and features
   useEffect(() => {
-    fetch('/api/modules').then(r => r.json()).then(setModules);
-    fetch('/api/features').then(r => r.json()).then(setFeatures);
+    fetch('/api/modules')
+      .then(r => r.json())
+      .then(d => setModules(Array.isArray(d) ? d : []))
+      .catch(() => setModules([]));
+    fetch('/api/features')
+      .then(r => r.json())
+      .then(d => setFeatures(Array.isArray(d) ? d : []))
+      .catch(() => setFeatures([]));
   }, []);
 
   const handlePeriodChange = (p: 'daily' | 'weekly' | 'monthly' | 'custom') => {
@@ -136,7 +142,8 @@ export default function ReportsPage() {
     }
   }, [period, startDate, endDate, moduleId, featureId]);
 
-  const filteredFeatures = features.filter(f => !moduleId || f.module_id === Number(moduleId));
+  const safeFeatures = Array.isArray(features) ? features : [];
+  const filteredFeatures = safeFeatures.filter(f => !moduleId || f.module_id === Number(moduleId));
 
   const handlePrint = () => {
     window.print();

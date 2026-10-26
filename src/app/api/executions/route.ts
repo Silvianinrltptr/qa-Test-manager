@@ -14,14 +14,14 @@ export async function GET(req: NextRequest) {
     const testCaseId = searchParams.get('testCaseId');
 
     if (testCaseId) {
-      const executions = db.prepare(`
+      const executions = await db.prepare(`
         SELECT * FROM executions WHERE test_case_id = ? ORDER BY exec_date DESC
       `).all(Number(testCaseId));
-      return NextResponse.json(executions);
+      return NextResponse.json(executions || []);
     }
 
     // Recent executions
-    const executions = db.prepare(`
+    const executions = await db.prepare(`
       SELECT e.*, tc.case_id, tc.title, m.name as module_name, f.name as feature_name
       FROM executions e
       JOIN test_cases tc ON tc.id = e.test_case_id
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       ORDER BY e.exec_date DESC
       LIMIT 50
     `).all();
-    return NextResponse.json(executions);
+    return NextResponse.json(executions || []);
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -50,22 +50,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'test_case_id and result are required' }, { status: 400 });
     }
 
-    const tc = db.prepare('SELECT * FROM test_cases WHERE id = ?').get(Number(test_case_id)) as { case_id: string; title: string } | undefined;
+    const tc = (await db.prepare('SELECT * FROM test_cases WHERE id = ?').get(Number(test_case_id))) as { case_id: string; title: string } | undefined;
     if (!tc) return NextResponse.json({ error: 'Test case not found' }, { status: 404 });
 
     // Insert execution
-    const execResult = db.prepare(`
+    const execResult = await db.prepare(`
       INSERT INTO executions (test_case_id, exec_date, environment, actual_result, result, evidence, defect_ref, notes, is_retest)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       Number(test_case_id),
-      exec_date || new Date().toISOString(),
+      exec_date ? new Date(exec_date) : new Date(),
       environment || null, actual_result || null, result,
       evidence || null, defect_ref || null, notes || null, is_retest ? 1 : 0
     );
 
     // Update test case latest result and exec status
-    db.prepare(`
+    await db.prepare(`
       UPDATE test_cases 
       SET latest_result = ?, exec_status = 'executed', actual_result = ?, 
           defect_ref = COALESCE(?, defect_ref), updated_at = CURRENT_TIMESTAMP
@@ -73,13 +73,13 @@ export async function POST(req: NextRequest) {
     `).run(result, actual_result || null, defect_ref || null, Number(test_case_id));
 
     const execId = execResult.lastInsertRowid as number;
-    logActivity(db, 'executed', 'test_case', Number(test_case_id), tc.case_id, `Execution: ${tc.case_id} → ${result.toUpperCase()}`);
-    logChange(db, {
+    await logActivity(db, 'executed', 'test_case', Number(test_case_id), tc.case_id, `Execution: ${tc.case_id} → ${result.toUpperCase()}`);
+    await logChange(db, {
       entityType: 'test_case', entityId: Number(test_case_id), entityRef: tc.case_id,
       changeType: 'executed', newValues: { result, exec_date, environment }
     });
 
-    const execution = db.prepare('SELECT * FROM executions WHERE id = ?').get(execId);
+    const execution = await db.prepare('SELECT * FROM executions WHERE id = ?').get(execId);
     return NextResponse.json(execution, { status: 201 });
   } catch (error) {
     console.error(error);

@@ -31,8 +31,14 @@ export default function ModulesPage() {
         fetch('/api/modules'),
         fetch('/api/features'),
       ]);
-      if (mRes.ok) setModules(await mRes.json());
-      if (fRes.ok) setFeatures(await fRes.json());
+      if (mRes.ok) {
+        const mData = await mRes.json();
+        setModules(Array.isArray(mData) ? mData : []);
+      }
+      if (fRes.ok) {
+        const fData = await fRes.json();
+        setFeatures(Array.isArray(fData) ? fData : []);
+      }
     } finally {
       setLoading(false);
     }

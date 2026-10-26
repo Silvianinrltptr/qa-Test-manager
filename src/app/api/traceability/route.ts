@@ -18,28 +18,28 @@ export async function GET(req: NextRequest) {
     const modParams = moduleId ? [Number(moduleId)] : [];
 
     // Modules
-    const modules = db.prepare(`SELECT * FROM modules ${modFilter} ORDER BY name`).all(...modParams) as Module[];
+    const modules = ((await db.prepare(`SELECT * FROM modules ${modFilter} ORDER BY name`).all(...modParams)) as Module[]) || [];
 
     // Features
-    const features = db.prepare(`SELECT * FROM features ORDER BY name`).all() as Feature[];
+    const features = ((await db.prepare(`SELECT * FROM features ORDER BY name`).all()) as Feature[]) || [];
 
     // Requirements
-    const requirements = db.prepare(`SELECT * FROM requirements WHERE status != 'archived' ORDER BY ref_id`).all() as (Requirement & { ref_id: string })[];
+    const requirements = ((await db.prepare(`SELECT * FROM requirements WHERE status != 'archived' ORDER BY ref_id`).all()) as (Requirement & { ref_id: string })[]) || [];
 
     // Test cases
-    const testCases = db.prepare(`
+    const testCases = ((await db.prepare(`
       SELECT tc.*, m.name as module_name, f.name as feature_name
       FROM test_cases tc
       LEFT JOIN modules m ON m.id = tc.module_id
       LEFT JOIN features f ON f.id = tc.feature_id
       WHERE tc.lifecycle_status != 'archived'
       ORDER BY tc.case_id
-    `).all() as (TestCase & { module_name?: string; feature_name?: string })[];
+    `).all()) as (TestCase & { module_name?: string; feature_name?: string })[]) || [];
 
     // Executions (latest execution per test case)
-    const executions = db.prepare(`
+    const executions = ((await db.prepare(`
       SELECT * FROM executions ORDER BY exec_date DESC
-    `).all() as Execution[];
+    `).all()) as Execution[]) || [];
 
     // Build hierarchical tree
     const matrix = modules.map(mod => {

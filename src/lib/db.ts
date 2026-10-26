@@ -1,242 +1,208 @@
-import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { prisma } from './prisma';
+
 export { prisma } from './prisma';
 
-
-const DB_DIR = path.join(process.cwd(), 'data');
-const DB_PATH = path.join(DB_DIR, 'qa-manager.db');
-
-let db: Database.Database | null = null;
-
-export function getDb(): Database.Database {
-  if (db) return db;
-  
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
-  }
-
-  db = new Database(DB_PATH);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-
-  initSchema(db);
-  return db;
+export interface RunResult {
+  changes: number;
+  lastInsertRowid: number;
 }
 
-function initSchema(db: Database.Database) {
-  db.exec(`
-    -- Modules
-    CREATE TABLE IF NOT EXISTS modules (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      description TEXT,
-      prefix TEXT NOT NULL UNIQUE,
-      status TEXT NOT NULL DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+export interface Statement<T = any> {
+  all(...params: any[]): Promise<T[]>;
+  get(...params: any[]): Promise<T | null | undefined>;
+  run(...params: any[]): Promise<RunResult>;
+}
 
-    -- Features
-    CREATE TABLE IF NOT EXISTS features (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      module_id INTEGER NOT NULL,
-      name TEXT NOT NULL,
-      description TEXT,
-      status TEXT NOT NULL DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (module_id) REFERENCES modules(id)
-    );
+export interface IDatabase {
+  prepare<T = any>(sql: string): Statement<T>;
+  exec?(sql: string): Promise<void> | void;
+}
 
-    -- Requirements
-    CREATE TABLE IF NOT EXISTS requirements (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      module_id INTEGER,
-      feature_id INTEGER,
-      ref_id TEXT,
-      title TEXT NOT NULL,
-      description TEXT,
-      change_type TEXT DEFAULT 'new',
-      status TEXT DEFAULT 'active',
-      version INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (module_id) REFERENCES modules(id),
-      FOREIGN KEY (feature_id) REFERENCES features(id)
-    );
+// Recursively convert BigInt to Number so JSON.stringify / NextResponse.json never throws
+export function sanitizeBigInt<T = any>(obj: T): T {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj === 'bigint') return Number(obj) as any;
+  if (Array.isArray(obj)) return obj.map(sanitizeBigInt) as any;
+  if (typeof obj === 'object' && !(obj instanceof Date)) {
+    const res: Record<string, any> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      res[k] = sanitizeBigInt(v);
+    }
+    return res as any;
+  }
+  return obj;
+}
 
-    -- Requirement history
-    CREATE TABLE IF NOT EXISTS requirement_history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      requirement_id INTEGER NOT NULL,
-      title TEXT,
-      description TEXT,
-      change_type TEXT,
-      version INTEGER,
-      changed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (requirement_id) REFERENCES requirements(id)
-    );
+// Translate common SQLite syntax to PostgreSQL syntax
+export function translateSql(sql: string): string {
+  let translated = sql
+    .replace(/datetime\(\s*'now'\s*,\s*'-7 days'\s*\)/gi, "(NOW() - INTERVAL '7 days')")
+    .replace(/datetime\(\s*'now'\s*\)/gi, "NOW()")
+    .replace(/strftime\(/gi, "to_char(")
+    .replace(/\bAUTOINCREMENT\b/gi, '')
+    .replace(/\bLIKE\b/g, 'ILIKE')
+    .trim();
 
-    -- Test cases
-    CREATE TABLE IF NOT EXISTS test_cases (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      case_id TEXT NOT NULL UNIQUE,
-      module_id INTEGER NOT NULL,
-      feature_id INTEGER NOT NULL,
-      requirement_ref TEXT,
-      title TEXT NOT NULL,
-      test_type TEXT DEFAULT 'functional',
-      preconditions TEXT,
-      test_steps TEXT,
-      test_data TEXT,
-      expected_result TEXT,
-      actual_result TEXT,
-      priority TEXT DEFAULT 'medium',
-      prep_status TEXT DEFAULT 'draft',
-      exec_status TEXT DEFAULT 'not_run',
-      latest_result TEXT DEFAULT 'not_run',
-      evidence TEXT,
-      defect_ref TEXT,
-      notes TEXT,
-      lifecycle_status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (module_id) REFERENCES modules(id),
-      FOREIGN KEY (feature_id) REFERENCES features(id)
-    );
+  // Convert positional ? to $1, $2, $3, ...
+  let paramIdx = 1;
+  translated = translated.replace(/\?/g, () => `$${paramIdx++}`);
+  return translated;
+}
 
-    -- Test case sequence per module (for unique IDs)
-    CREATE TABLE IF NOT EXISTS tc_sequence (
-      module_prefix TEXT PRIMARY KEY,
-      next_seq INTEGER DEFAULT 1
-    );
+class PgDatabase implements IDatabase {
+  prepare<T = any>(sql: string): Statement<T> {
+    return {
+      all: async (...params: any[]): Promise<T[]> => {
+        const pgSql = translateSql(sql);
+        const rows = await prisma.$queryRawUnsafe(pgSql, ...params);
+        return sanitizeBigInt(rows) as T[];
+      },
+      get: async (...params: any[]): Promise<T | undefined> => {
+        const pgSql = translateSql(sql);
+        const rows = (await prisma.$queryRawUnsafe(pgSql, ...params)) as any[];
+        const first = rows && rows.length > 0 ? rows[0] : undefined;
+        return sanitizeBigInt(first) as T | undefined;
+      },
+      run: async (...params: any[]): Promise<RunResult> => {
+        let pgSql = translateSql(sql);
+        const isInsert = /^\s*INSERT\s+INTO/i.test(pgSql);
+        if (isInsert) {
+          if (!/RETURNING/i.test(pgSql)) {
+            pgSql += ' RETURNING id';
+          }
+          try {
+            const rows = (await prisma.$queryRawUnsafe(pgSql, ...params)) as any[];
+            const id = rows && rows.length > 0 && rows[0].id ? Number(rows[0].id) : 0;
+            return { changes: rows.length, lastInsertRowid: id };
+          } catch (err: any) {
+            // In case table does not have 'id' column, execute without RETURNING
+            const count = await prisma.$executeRawUnsafe(translateSql(sql), ...params);
+            return { changes: Number(count), lastInsertRowid: 0 };
+          }
+        } else {
+          const count = await prisma.$executeRawUnsafe(pgSql, ...params);
+          return { changes: Number(count), lastInsertRowid: 0 };
+        }
+      },
+    };
+  }
+}
 
-    -- Execution history
-    CREATE TABLE IF NOT EXISTS executions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      test_case_id INTEGER NOT NULL,
-      exec_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-      environment TEXT,
-      actual_result TEXT,
-      result TEXT NOT NULL,
-      evidence TEXT,
-      defect_ref TEXT,
-      notes TEXT,
-      is_retest INTEGER DEFAULT 0,
-      FOREIGN KEY (test_case_id) REFERENCES test_cases(id)
-    );
+class SqliteDatabaseAdapter implements IDatabase {
+  private rawDb: any;
+  constructor(rawDb: any) {
+    this.rawDb = rawDb;
+  }
+  prepare<T = any>(sql: string): Statement<T> {
+    const stmt = this.rawDb.prepare(sql);
+    return {
+      all: async (...params: any[]): Promise<T[]> => stmt.all(...params),
+      get: async (...params: any[]): Promise<T | undefined> => stmt.get(...params),
+      run: async (...params: any[]): Promise<RunResult> => {
+        const res = stmt.run(...params);
+        return { changes: res.changes, lastInsertRowid: Number(res.lastInsertRowid) };
+      },
+    };
+  }
+}
 
-    -- Change log
-    CREATE TABLE IF NOT EXISTS change_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      entity_type TEXT NOT NULL,
-      entity_id INTEGER NOT NULL,
-      entity_ref TEXT,
-      change_type TEXT NOT NULL,
-      changed_fields TEXT,
-      old_values TEXT,
-      new_values TEXT,
-      reason TEXT,
-      requirement_ref TEXT,
-      changed_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+let activeDb: IDatabase | null = null;
 
-    -- Weekly snapshots
-    CREATE TABLE IF NOT EXISTS weekly_snapshots (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      week_start DATE NOT NULL,
-      week_end DATE NOT NULL,
-      snapshot_data TEXT NOT NULL,
-      notes TEXT,
-      activities TEXT,
-      next_priorities TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+export function getDb(): IDatabase {
+  if (activeDb) return activeDb;
 
-    -- Activity log
-    CREATE TABLE IF NOT EXISTS activity_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      action TEXT NOT NULL,
-      entity_type TEXT,
-      entity_id INTEGER,
-      entity_ref TEXT,
-      description TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+  // If DATABASE_URL is configured (PostgreSQL on Neon / Supabase / Railway or local PG),
+  // use the Prisma PostgreSQL driver
+  if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('postgres')) {
+    activeDb = new PgDatabase();
+    return activeDb;
+  }
 
-    -- AI drafts (temporary storage for review)
-    CREATE TABLE IF NOT EXISTS ai_drafts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      session_id TEXT NOT NULL,
-      module_id INTEGER,
-      feature_id INTEGER,
-      draft_data TEXT NOT NULL,
-      status TEXT DEFAULT 'pending',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (module_id) REFERENCES modules(id),
-      FOREIGN KEY (feature_id) REFERENCES features(id)
-    );
+  // Graceful local SQLite fallback
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const BetterSqlite3 = require('better-sqlite3');
+    const DB_DIR = path.join(process.cwd(), 'data');
+    const DB_PATH = path.join(DB_DIR, 'qa-manager.db');
 
-    -- Test case comments & collaborator feedback
-    CREATE TABLE IF NOT EXISTS test_case_comments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      test_case_id INTEGER NOT NULL,
-      author_name TEXT NOT NULL,
-      author_role TEXT NOT NULL DEFAULT 'pm',
-      content TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      reply TEXT,
-      replied_at DATETIME,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      resolved_at DATETIME,
-      FOREIGN KEY (test_case_id) REFERENCES test_cases(id) ON DELETE CASCADE
-    );
-  `);
+    if (!fs.existsSync(DB_DIR)) {
+      fs.mkdirSync(DB_DIR, { recursive: true });
+    }
+
+    const sqlite = new BetterSqlite3(DB_PATH);
+    sqlite.pragma('journal_mode = WAL');
+    sqlite.pragma('foreign_keys = ON');
+    activeDb = new SqliteDatabaseAdapter(sqlite);
+    return activeDb;
+  } catch (err) {
+    // If better-sqlite3 cannot be loaded (e.g. read-only filesystem or serverless), fallback to PgDatabase
+    activeDb = new PgDatabase();
+    return activeDb;
+  }
 }
 
 // ─── Utility helpers ─────────────────────────────────────────────────────────
 
-export function generateCaseId(db: Database.Database, prefix: string): string {
-  const row = db.prepare('SELECT next_seq FROM tc_sequence WHERE module_prefix = ?').get(prefix) as { next_seq: number } | undefined;
-  const seq = row ? row.next_seq : 1;
-  db.prepare(`
+export async function generateCaseId(db: IDatabase, prefix: string): Promise<string> {
+  const row = (await db.prepare('SELECT next_seq FROM tc_sequence WHERE module_prefix = ?').get(prefix)) as { next_seq: number } | undefined;
+  const seq = row && row.next_seq !== null && row.next_seq !== undefined ? Number(row.next_seq) : 1;
+  await db.prepare(`
     INSERT INTO tc_sequence (module_prefix, next_seq) VALUES (?, ?)
-    ON CONFLICT(module_prefix) DO UPDATE SET next_seq = excluded.next_seq
+    ON CONFLICT(module_prefix) DO UPDATE SET next_seq = EXCLUDED.next_seq
   `).run(prefix, seq + 1);
   return `${prefix}-${String(seq).padStart(3, '0')}`;
 }
 
-export function logActivity(db: Database.Database, action: string, entityType: string, entityId: number | null, entityRef: string, description: string) {
-  db.prepare(`
-    INSERT INTO activity_log (action, entity_type, entity_id, entity_ref, description)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(action, entityType, entityId, entityRef, description);
+export async function logActivity(
+  db: IDatabase,
+  action: string,
+  entityType: string,
+  entityId: number | null,
+  entityRef: string,
+  description: string
+) {
+  try {
+    await db.prepare(`
+      INSERT INTO activity_log (action, entity_type, entity_id, entity_ref, description)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(action, entityType, entityId, entityRef, description);
+  } catch (err) {
+    console.error('Failed to log activity:', err);
+  }
 }
 
-export function logChange(db: Database.Database, opts: {
-  entityType: string;
-  entityId: number;
-  entityRef: string;
-  changeType: string;
-  changedFields?: string;
-  oldValues?: unknown;
-  newValues?: unknown;
-  reason?: string;
-  requirementRef?: string;
-}) {
-  db.prepare(`
-    INSERT INTO change_log (entity_type, entity_id, entity_ref, change_type, changed_fields, old_values, new_values, reason, requirement_ref)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    opts.entityType,
-    opts.entityId,
-    opts.entityRef,
-    opts.changeType,
-    opts.changedFields ?? null,
-    opts.oldValues ? JSON.stringify(opts.oldValues) : null,
-    opts.newValues ? JSON.stringify(opts.newValues) : null,
-    opts.reason ?? null,
-    opts.requirementRef ?? null
-  );
+export async function logChange(
+  db: IDatabase,
+  opts: {
+    entityType: string;
+    entityId: number;
+    entityRef: string;
+    changeType: string;
+    changedFields?: string;
+    oldValues?: unknown;
+    newValues?: unknown;
+    reason?: string;
+    requirementRef?: string;
+  }
+) {
+  try {
+    await db.prepare(`
+      INSERT INTO change_log (entity_type, entity_id, entity_ref, change_type, changed_fields, old_values, new_values, reason, requirement_ref)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      opts.entityType,
+      opts.entityId,
+      opts.entityRef,
+      opts.changeType,
+      opts.changedFields ?? null,
+      opts.oldValues ? JSON.stringify(opts.oldValues) : null,
+      opts.newValues ? JSON.stringify(opts.newValues) : null,
+      opts.reason ?? null,
+      opts.requirementRef ?? null
+    );
+  } catch (err) {
+    console.error('Failed to log change:', err);
+  }
 }

@@ -41,4 +41,6 @@ next-env.d.ts
 
 # Database backups
 data/*-backup-*.db
+*.db-wal
+*.db-shm
 

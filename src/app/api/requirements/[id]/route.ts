@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const db = getDb();
 
-    const requirement = db.prepare(`
+    const requirement = await db.prepare(`
       SELECT r.*,
         m.name as module_name,
         m.prefix as module_prefix,
@@ -30,14 +30,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const reqData = requirement as { id: number; ref_id: string; module_id: number; feature_id: number };
 
     // Fetch history
-    const history = db.prepare(`
+    const history = await db.prepare(`
       SELECT * FROM requirement_history 
       WHERE requirement_id = ? 
       ORDER BY version DESC
     `).all(Number(id));
 
     // Fetch linked test cases
-    const linkedTestCases = db.prepare(`
+    const linkedTestCases = await db.prepare(`
       SELECT tc.id, tc.case_id, tc.title, tc.test_type, tc.priority, 
              tc.prep_status, tc.exec_status, tc.latest_result, tc.lifecycle_status
       FROM test_cases tc
@@ -67,7 +67,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const body = await req.json();
     const { title, description, change_type = 'updated', status = 'active', module_id, feature_id, reason } = body;
 
-    const existing = db.prepare('SELECT * FROM requirements WHERE id = ?').get(Number(id)) as {
+    const existing = (await db.prepare('SELECT * FROM requirements WHERE id = ?').get(Number(id))) as {
       id: number;
       ref_id: string;
       title: string;
@@ -84,7 +84,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const newVersion = (existing.version || 1) + 1;
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE requirements 
       SET title = ?, description = ?, change_type = ?, status = ?, 
           version = ?, module_id = ?, feature_id = ?, updated_at = CURRENT_TIMESTAMP
@@ -101,7 +101,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     );
 
     // Record in requirement_history
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO requirement_history (requirement_id, title, description, change_type, version)
       VALUES (?, ?, ?, ?, ?)
     `).run(
@@ -113,7 +113,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     );
 
     // Log activity & change
-    logActivity(
+    await logActivity(
       db,
       'update_requirement',
       'requirement',
@@ -122,7 +122,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       `Updated requirement ${existing.ref_id} (v${newVersion}, type: ${change_type}): ${title || existing.title}`
     );
 
-    logChange(db, {
+    await logChange(db, {
       entityType: 'requirement',
       entityId: Number(id),
       entityRef: existing.ref_id,
@@ -148,7 +148,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
     const db = getDb();
 
-    const existing = db.prepare('SELECT * FROM requirements WHERE id = ?').get(Number(id)) as {
+    const existing = (await db.prepare('SELECT * FROM requirements WHERE id = ?').get(Number(id))) as {
       id: number;
       ref_id: string;
       title: string;
@@ -159,10 +159,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     // Soft delete / archive to preserve traceability
-    db.prepare(`UPDATE requirements SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(Number(id));
+    await db.prepare(`UPDATE requirements SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(Number(id));
 
-    logActivity(db, 'archive_requirement', 'requirement', Number(id), existing.ref_id, `Archived requirement ${existing.ref_id}: ${existing.title}`);
-    logChange(db, {
+    await logActivity(db, 'archive_requirement', 'requirement', Number(id), existing.ref_id, `Archived requirement ${existing.ref_id}: ${existing.title}`);
+    await logChange(db, {
       entityType: 'requirement',
       entityId: Number(id),
       entityRef: existing.ref_id,
@@ -173,7 +173,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting requirement:', error);
+    console.error('Error archiving requirement:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

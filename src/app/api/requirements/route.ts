@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
-    const requirements = db.prepare(`
+    const requirements = await db.prepare(`
       SELECT r.*,
         m.name as module_name,
         m.prefix as module_prefix,
@@ -78,7 +78,8 @@ export async function POST(req: NextRequest) {
     // Auto-generate ref_id if not provided
     let finalRefId = ref_id?.trim();
     if (!finalRefId) {
-      const count = (db.prepare('SELECT COUNT(*) as count FROM requirements').get() as { count: number }).count;
+      const countRow = (await db.prepare('SELECT COUNT(*) as count FROM requirements').get()) as { count: number } | undefined;
+      const count = countRow ? Number(countRow.count) : 0;
       finalRefId = `REQ-${String(count + 1).padStart(3, '0')}`;
     }
 
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
       VALUES (?, ?, ?, ?, ?, 'new', ?, 1)
     `);
 
-    const res = stmt.run(
+    const res = await stmt.run(
       module_id ? Number(module_id) : null,
       feature_id ? Number(feature_id) : null,
       finalRefId,
@@ -99,14 +100,14 @@ export async function POST(req: NextRequest) {
     const newId = Number(res.lastInsertRowid);
 
     // Save initial history
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO requirement_history (requirement_id, title, description, change_type, version)
       VALUES (?, ?, ?, 'new', 1)
     `).run(newId, title.trim(), description?.trim() || null);
 
     // Log activity and change
-    logActivity(db, 'create_requirement', 'requirement', newId, finalRefId, `Created new requirement: ${finalRefId} - ${title.trim()}`);
-    logChange(db, {
+    await logActivity(db, 'create_requirement', 'requirement', newId, finalRefId, `Created new requirement: ${finalRefId} - ${title.trim()}`);
+    await logChange(db, {
       entityType: 'requirement',
       entityId: newId,
       entityRef: finalRefId,

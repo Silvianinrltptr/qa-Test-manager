@@ -9,7 +9,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/api/modules/[id]
 
     const db = getDb();
     const { id } = await ctx.params;
-    const moduleRecord = db.prepare('SELECT * FROM modules WHERE id = ?').get(Number(id));
+    const moduleRecord = await db.prepare('SELECT * FROM modules WHERE id = ?').get(Number(id));
     if (!moduleRecord) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(moduleRecord);
   } catch (error) {
@@ -28,16 +28,16 @@ export async function PUT(req: NextRequest, ctx: RouteContext<'/api/modules/[id]
     const body = await req.json();
     const { name, description, status } = body;
 
-    const old = db.prepare('SELECT * FROM modules WHERE id = ?').get(Number(id)) as { name: string; description: string; status: string; prefix: string } | undefined;
+    const old = (await db.prepare('SELECT * FROM modules WHERE id = ?').get(Number(id))) as { name: string; description: string; status: string; prefix: string } | undefined;
     if (!old) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE modules SET name = ?, description = ?, status = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(name ?? old.name, description ?? old.description, status ?? old.status, Number(id));
 
-    logActivity(db, 'updated', 'module', Number(id), old.prefix, `Module "${name ?? old.name}" updated`);
-    logChange(db, {
+    await logActivity(db, 'updated', 'module', Number(id), old.prefix, `Module "${name ?? old.name}" updated`);
+    await logChange(db, {
       entityType: 'module', entityId: Number(id), entityRef: old.prefix,
       changeType: 'updated',
       changedFields: Object.keys(body).join(', '),
@@ -45,7 +45,7 @@ export async function PUT(req: NextRequest, ctx: RouteContext<'/api/modules/[id]
       newValues: body
     });
 
-    const updated = db.prepare('SELECT * FROM modules WHERE id = ?').get(Number(id));
+    const updated = await db.prepare('SELECT * FROM modules WHERE id = ?').get(Number(id));
     return NextResponse.json(updated);
   } catch (error) {
     console.error(error);
@@ -62,11 +62,11 @@ export async function DELETE(req: NextRequest, ctx: RouteContext<'/api/modules/[
     const { id } = await ctx.params;
     
     // Archive instead of delete
-    const mod = db.prepare('SELECT * FROM modules WHERE id = ?').get(Number(id)) as { prefix: string; name: string } | undefined;
+    const mod = (await db.prepare('SELECT * FROM modules WHERE id = ?').get(Number(id))) as { prefix: string; name: string } | undefined;
     if (!mod) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    db.prepare(`UPDATE modules SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(Number(id));
-    logActivity(db, 'archived', 'module', Number(id), mod.prefix, `Module "${mod.name}" archived`);
+    await db.prepare(`UPDATE modules SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(Number(id));
+    await logActivity(db, 'archived', 'module', Number(id), mod.prefix, `Module "${mod.name}" archived`);
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -44,11 +44,18 @@ export default function BulkAddPage() {
   const pasteRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    fetch('/api/modules').then(r => r.json()).then(setModules);
-    fetch('/api/features').then(r => r.json()).then(setFeatures);
+    fetch('/api/modules')
+      .then(r => r.json())
+      .then(d => setModules(Array.isArray(d) ? d : []))
+      .catch(() => setModules([]));
+    fetch('/api/features')
+      .then(r => r.json())
+      .then(d => setFeatures(Array.isArray(d) ? d : []))
+      .catch(() => setFeatures([]));
   }, []);
 
-  const filteredFeatures = (moduleId: string) => features.filter(f => f.module_id === Number(moduleId));
+  const safeFeatures = Array.isArray(features) ? features : [];
+  const filteredFeatures = (moduleId: string) => safeFeatures.filter(f => f.module_id === Number(moduleId));
 
   const addRow = () => setRows(prev => [...prev, { ...emptyRow(), module_id: defaultModuleId, feature_id: defaultFeatureId }]);
 

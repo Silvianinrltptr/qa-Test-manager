@@ -51,11 +51,13 @@ export async function GET(req: NextRequest) {
     const safeSort = allowedSorts.includes(sortBy) ? sortBy : 'created_at';
     const safeDir = sortDir === 'ASC' ? 'ASC' : 'DESC';
 
-    const countResult = db.prepare(`
+    const countResult = (await db.prepare(`
       SELECT COUNT(*) as count FROM test_cases tc ${where}
-    `).get(...params) as { count: number };
+    `).get(...params)) as { count: number } | undefined;
 
-    const testCases = db.prepare(`
+    const totalCount = countResult ? Number(countResult.count) : 0;
+
+    const testCases = await db.prepare(`
       SELECT tc.*, m.name as module_name, m.prefix as module_prefix, f.name as feature_name,
         (SELECT COUNT(*) FROM test_case_comments WHERE test_case_id = tc.id) as comment_count
       FROM test_cases tc
@@ -67,12 +69,12 @@ export async function GET(req: NextRequest) {
     `).all(...params, limit, offset);
 
     return NextResponse.json({
-      data: testCases,
+      data: testCases || [],
       pagination: {
-        total: countResult.count,
+        total: totalCount,
         page,
         limit,
-        totalPages: Math.ceil(countResult.count / limit),
+        totalPages: Math.ceil(totalCount / limit) || 1,
       }
     });
   } catch (error) {
@@ -94,7 +96,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No cases provided' }, { status: 400 });
     }
 
-    const insert = db.prepare(`
+    const insertStmt = db.prepare(`
       INSERT INTO test_cases (
         case_id, module_id, feature_id, requirement_ref, title, test_type,
         preconditions, test_steps, test_data, expected_result, priority,
@@ -125,40 +127,37 @@ export async function POST(req: NextRequest) {
       case?: CreateTestCaseInput;
     }
 
-    const insertMany = db.transaction((casesList: CreateTestCaseInput[]) => {
-      const results: TestCaseInsertResult[] = [];
-      for (const c of casesList) {
-        if (!c.module_id || !c.feature_id || !c.title?.trim()) {
-          results.push({ error: 'Missing required fields', case: c });
-          continue;
-        }
-
-        const mod = db.prepare('SELECT prefix FROM modules WHERE id = ?').get(Number(c.module_id)) as { prefix: string } | undefined;
-        if (!mod) { results.push({ error: 'Module not found', case: c }); continue; }
-
-        const caseId = generateCaseId(db, mod.prefix);
-        
-        insert.run(
-          caseId, Number(c.module_id), Number(c.feature_id),
-          c.requirement_ref || null, c.title.trim(), c.test_type || 'functional',
-          c.preconditions || null, c.test_steps || null, c.test_data || null,
-          c.expected_result || null, c.priority || 'medium',
-          c.prep_status || 'draft', c.notes || null
-        );
-
-        const newCase = db.prepare('SELECT * FROM test_cases WHERE case_id = ?').get(caseId) as { id: number };
-        logActivity(db, 'created', 'test_case', newCase.id, caseId, `Test case "${c.title}" created`);
-        logChange(db, {
-          entityType: 'test_case', entityId: newCase.id, entityRef: caseId,
-          changeType: 'created', newValues: c
-        });
-
-        results.push({ success: true, caseId, id: newCase.id });
+    const results: TestCaseInsertResult[] = [];
+    for (const c of cases as CreateTestCaseInput[]) {
+      if (!c.module_id || !c.feature_id || !c.title?.trim()) {
+        results.push({ error: 'Missing required fields', case: c });
+        continue;
       }
-      return results;
-    });
 
-    const results = insertMany(cases as CreateTestCaseInput[]);
+      const mod = (await db.prepare('SELECT prefix FROM modules WHERE id = ?').get(Number(c.module_id))) as { prefix: string } | undefined;
+      if (!mod) { results.push({ error: 'Module not found', case: c }); continue; }
+
+      const caseId = await generateCaseId(db, mod.prefix);
+      
+      const insertRes = await insertStmt.run(
+        caseId, Number(c.module_id), Number(c.feature_id),
+        c.requirement_ref || null, c.title.trim(), c.test_type || 'functional',
+        c.preconditions || null, c.test_steps || null, c.test_data || null,
+        c.expected_result || null, c.priority || 'medium',
+        c.prep_status || 'draft', c.notes || null
+      );
+
+      const insertedId = insertRes.lastInsertRowid || ((await db.prepare('SELECT id FROM test_cases WHERE case_id = ?').get(caseId)) as any)?.id;
+
+      await logActivity(db, 'created', 'test_case', insertedId, caseId, `Test case "${c.title}" created`);
+      await logChange(db, {
+        entityType: 'test_case', entityId: insertedId, entityRef: caseId,
+        changeType: 'created', newValues: c
+      });
+
+      results.push({ success: true, caseId, id: insertedId });
+    }
+
     const succeeded = results.filter((r: TestCaseInsertResult) => r.success).length;
     const failed = results.filter((r: TestCaseInsertResult) => r.error).length;
 

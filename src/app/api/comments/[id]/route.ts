@@ -17,13 +17,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid comment ID' }, { status: 400 });
     }
 
-    const body = await req.json() as {
+    const body = (await req.json()) as {
       status?: 'pending' | 'reviewed' | 'resolved';
       reply?: string;
     };
 
     const db = getDb();
-    const existing = db.prepare('SELECT * FROM test_case_comments WHERE id = ?').get(commentId) as TestCaseComment | undefined;
+    const existing = (await db.prepare('SELECT * FROM test_case_comments WHERE id = ?').get(commentId)) as TestCaseComment | undefined;
     if (!existing) {
       return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
     }
@@ -35,7 +35,7 @@ export async function PATCH(
       updates.push('status = ?');
       values.push(body.status);
       if (body.status === 'resolved') {
-        updates.push("resolved_at = datetime('now')");
+        updates.push('resolved_at = CURRENT_TIMESTAMP');
       } else {
         updates.push('resolved_at = NULL');
       }
@@ -44,15 +44,15 @@ export async function PATCH(
     if (body.reply !== undefined) {
       updates.push('reply = ?');
       values.push(body.reply.trim());
-      updates.push("replied_at = datetime('now')");
+      updates.push('replied_at = CURRENT_TIMESTAMP');
     }
 
     if (updates.length > 0) {
       values.push(commentId);
-      db.prepare(`UPDATE test_case_comments SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+      await db.prepare(`UPDATE test_case_comments SET ${updates.join(', ')} WHERE id = ?`).run(...values);
     }
 
-    logActivity(
+    await logActivity(
       db,
       'comment_updated',
       'test_case',
@@ -61,7 +61,7 @@ export async function PATCH(
       `Comment #${commentId} status updated to ${body.status || existing.status}`
     );
 
-    const updated = db.prepare('SELECT * FROM test_case_comments WHERE id = ?').get(commentId) as TestCaseComment;
+    const updated = (await db.prepare('SELECT * FROM test_case_comments WHERE id = ?').get(commentId)) as TestCaseComment;
     return NextResponse.json(updated);
   } catch (error) {
     console.error('Comments PATCH error:', error);
@@ -84,7 +84,7 @@ export async function DELETE(
     }
 
     const db = getDb();
-    db.prepare('DELETE FROM test_case_comments WHERE id = ?').run(commentId);
+    await db.prepare('DELETE FROM test_case_comments WHERE id = ?').run(commentId);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Comments DELETE error:', error);

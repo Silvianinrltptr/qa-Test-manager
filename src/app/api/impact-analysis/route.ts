@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
       feature_name: string | null;
     }
 
-    const requirements = db.prepare(`
+    const requirements = ((await db.prepare(`
       SELECT r.*,
         m.name as module_name,
         f.name as feature_name
@@ -76,10 +76,10 @@ export async function GET(req: NextRequest) {
       LEFT JOIN features f ON f.id = r.feature_id
       WHERE 1=1 ${modFilter}
       ORDER BY r.updated_at DESC
-    `).all(...modParams) as RequirementWithMeta[];
+    `).all(...modParams)) as RequirementWithMeta[]) || [];
 
     // 2. Fetch all test cases
-    const testCases = db.prepare(`
+    const testCases = ((await db.prepare(`
       SELECT tc.id, tc.case_id, tc.module_id, tc.feature_id, tc.requirement_ref,
              tc.title, tc.lifecycle_status, tc.prep_status, tc.latest_result,
              m.name as module_name, f.name as feature_name
@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN modules m ON m.id = tc.module_id
       LEFT JOIN features f ON f.id = tc.feature_id
       WHERE tc.lifecycle_status != 'archived'
-    `).all() as TestCaseWithMeta[];
+    `).all()) as TestCaseWithMeta[]) || [];
 
     const impacts: ImpactItem[] = [];
 
@@ -241,7 +241,7 @@ export async function POST(req: NextRequest) {
     let updatedCount = 0;
 
     for (const tcId of testCaseIds) {
-      const tc = db.prepare('SELECT id, case_id, title, lifecycle_status, prep_status FROM test_cases WHERE id = ?').get(tcId) as {
+      const tc = (await db.prepare('SELECT id, case_id, title, lifecycle_status, prep_status FROM test_cases WHERE id = ?').get(tcId)) as {
         id: number;
         case_id: string;
         title: string;
@@ -251,14 +251,14 @@ export async function POST(req: NextRequest) {
       if (!tc) continue;
 
       if (action === 'mark_obsolete') {
-        db.prepare(`
+        await db.prepare(`
           UPDATE test_cases 
           SET lifecycle_status = 'obsolete', updated_at = CURRENT_TIMESTAMP 
           WHERE id = ?
         `).run(tcId);
 
-        logActivity(db, 'obsolete_test_case', 'test_case', tcId, tc.case_id, `Marked ${tc.case_id} as Obsolete due to requirement change`);
-        logChange(db, {
+        await logActivity(db, 'obsolete_test_case', 'test_case', tcId, tc.case_id, `Marked ${tc.case_id} as Obsolete due to requirement change`);
+        await logChange(db, {
           entityType: 'test_case',
           entityId: tcId,
           entityRef: tc.case_id,
@@ -269,14 +269,14 @@ export async function POST(req: NextRequest) {
         });
         updatedCount++;
       } else if (action === 'mark_review') {
-        db.prepare(`
+        await db.prepare(`
           UPDATE test_cases 
           SET prep_status = 'in_progress', updated_at = CURRENT_TIMESTAMP 
           WHERE id = ?
         `).run(tcId);
 
-        logActivity(db, 'review_test_case', 'test_case', tcId, tc.case_id, `Marked ${tc.case_id} for preparation review due to requirement change`);
-        logChange(db, {
+        await logActivity(db, 'review_test_case', 'test_case', tcId, tc.case_id, `Marked ${tc.case_id} for preparation review due to requirement change`);
+        await logChange(db, {
           entityType: 'test_case',
           entityId: tcId,
           entityRef: tc.case_id,
