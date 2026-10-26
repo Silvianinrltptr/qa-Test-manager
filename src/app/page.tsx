@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Users, Lock, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
+import { ShieldCheck, BarChart, Lock, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
@@ -249,11 +249,22 @@ export default function LandingPortalPage() {
                 fontSize: 20,
                 fontWeight: 700,
                 color: 'var(--foreground)',
-                margin: '0 0 10px 0',
+                margin: '0 0 6px 0',
               }}
             >
               QA Workspace
             </h2>
+
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--primary)',
+                marginBottom: 10,
+              }}
+            >
+              Manage Your Testing Workflow
+            </div>
 
             <p
               style={{
@@ -290,7 +301,7 @@ export default function LandingPortalPage() {
             </button>
           </div>
 
-          {/* Card 2: Developer & PM Workspace */}
+          {/* Card 2: Project Overview */}
           <div
             className="card"
             style={{
@@ -319,7 +330,7 @@ export default function LandingPortalPage() {
                 marginBottom: 20,
               }}
             >
-              <Users size={32} />
+              <BarChart size={32} />
             </div>
 
             <h2
@@ -327,11 +338,22 @@ export default function LandingPortalPage() {
                 fontSize: 20,
                 fontWeight: 700,
                 color: 'var(--foreground)',
-                margin: '0 0 10px 0',
+                margin: '0 0 6px 0',
               }}
             >
-              Developer & PM Workspace
+              Project Overview
             </h2>
+
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--primary)',
+                marginBottom: 10,
+              }}
+            >
+              For Developers, PMs & Management
+            </div>
 
             <p
               style={{
@@ -363,7 +385,7 @@ export default function LandingPortalPage() {
                 borderRadius: 10,
               }}
             >
-              <span>Continue as Developer & PM</span>
+              <span>Continue to Project Overview</span>
               <ArrowRight size={16} />
             </button>
           </div>
