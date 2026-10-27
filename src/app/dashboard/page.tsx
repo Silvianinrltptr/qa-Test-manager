@@ -60,6 +60,9 @@ export default function DashboardPage() {
 • Ditambahkan: ${metrics.weeklyChange.added}
 • Diperbarui: ${metrics.weeklyChange.updated}
 • Kedaluwarsa: ${metrics.weeklyChange.obsolete}
+${metrics.byModule && metrics.byModule.length > 0 ? `
+📦 *Kemajuan per Modul:*
+${metrics.byModule.filter(m => Number(m.total) > 0).map(m => `• ${m.module} (${m.prefix}): ${m.total} kasus (${m.ready} siap, ${m.executed} dieksekusi)`).join('\n')}` : ''}
 
 ${results.fail > 0 ? `⚠️ Terdapat ${results.fail} test case yang GAGAL dan memerlukan tindak lanjut.` : '✅ Tidak ada kegagalan yang dilaporkan.'}
 ${results.blocked > 0 ? `🚧 ${results.blocked} test case TERBLOKIR.` : ''}`
@@ -82,6 +85,9 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case TERBLOKIR.` : ''}`
 • Added: ${metrics.weeklyChange.added}
 • Updated: ${metrics.weeklyChange.updated}
 • Obsolete: ${metrics.weeklyChange.obsolete}
+${metrics.byModule && metrics.byModule.length > 0 ? `
+📦 *Progress by Module:*
+${metrics.byModule.filter(m => Number(m.total) > 0).map(m => `• ${m.module} (${m.prefix}): ${m.total} cases (${m.ready} ready, ${m.executed} executed)`).join('\n')}` : ''}
 
 ${results.fail > 0 ? `⚠️ There are ${results.fail} test case(s) that FAILED and require follow-up.` : '✅ No failures reported.'}
 ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;

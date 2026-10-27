@@ -43,4 +43,5 @@ next-env.d.ts
 data/*-backup-*.db
 *.db-wal
 *.db-shm
+scripts/db-backup-*.json
 

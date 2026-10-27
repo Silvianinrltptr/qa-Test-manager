@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN tc.latest_result = 'blocked' THEN 1 END) as blocked
       FROM modules m
       LEFT JOIN test_cases tc ON tc.module_id = m.id AND tc.lifecycle_status = 'active'
-      WHERE m.status = 'active'
+      WHERE m.status = 'active' OR m.id IN (SELECT DISTINCT module_id FROM test_cases WHERE lifecycle_status = 'active')
       GROUP BY m.id
       ORDER BY m.name
     `).all();
