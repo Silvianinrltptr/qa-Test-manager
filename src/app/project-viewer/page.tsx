@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Modal } from '@/components/ui/Modal';
@@ -64,6 +64,8 @@ export default function ProjectViewerPage() {
   // Filters
   const [search, setSearch] = useState('');
   const [selectedModule, setSelectedModule] = useState('');
+  const [selectedFeature, setSelectedFeature] = useState('');
+  const [selectedPrepStatus, setSelectedPrepStatus] = useState('');
   const [selectedPriority, setSelectedPriority] = useState('');
   const [selectedResult, setSelectedResult] = useState('');
 
@@ -83,7 +85,7 @@ export default function ProjectViewerPage() {
     setRefreshing(true);
     try {
       const [casesRes, modulesRes, dashRes] = await Promise.all([
-        fetch(`/api/test-cases?limit=200&lang=${locale}`),
+        fetch(`/api/test-cases?limit=1000&lang=${locale}`),
         fetch('/api/modules'),
         fetch('/api/dashboard'),
       ]);
@@ -112,7 +114,7 @@ export default function ProjectViewerPage() {
   useEffect(() => {
     let ignore = false;
     Promise.all([
-      fetch(`/api/test-cases?limit=200&lang=${locale}`).then(r => (r.ok ? r.json() : null)),
+      fetch(`/api/test-cases?limit=1000&lang=${locale}`).then(r => (r.ok ? r.json() : null)),
       fetch('/api/modules').then(r => (r.ok ? r.json() : null)),
       fetch('/api/dashboard').then(r => (r.ok ? r.json() : null)),
     ])
@@ -223,9 +225,34 @@ export default function ProjectViewerPage() {
     }
   };
 
+  // Available features derived dynamically from actual test cases based on selected module
+  const availableFeatures = useMemo(() => {
+    const relevantCases = selectedModule
+      ? testCases.filter(tc => tc.module_id === Number(selectedModule))
+      : testCases;
+    const map = new Map<number, string>();
+    relevantCases.forEach(tc => {
+      if (tc.feature_id && tc.feature_name) {
+        map.set(Number(tc.feature_id), tc.feature_name);
+      }
+    });
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [testCases, selectedModule]);
+
+  // Keep selected feature in sync: reset if no longer valid for the selected module
+  useEffect(() => {
+    if (selectedFeature && !availableFeatures.some(f => String(f.id) === String(selectedFeature))) {
+      setSelectedFeature('');
+    }
+  }, [availableFeatures, selectedFeature]);
+
   // Filter test cases
   const filteredCases = testCases.filter(tc => {
     if (selectedModule && tc.module_id !== Number(selectedModule)) return false;
+    if (selectedFeature && tc.feature_id !== Number(selectedFeature)) return false;
+    if (selectedPrepStatus && tc.prep_status !== selectedPrepStatus) return false;
     if (selectedPriority && tc.priority !== selectedPriority) return false;
     if (selectedResult && tc.latest_result !== selectedResult) return false;
     if (search.trim()) {
@@ -307,8 +334,9 @@ export default function ProjectViewerPage() {
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
               <ClipboardList size={15} />
-              <span>{t('projectViewer.tabCases', 'Test Cases')} ({totalCases})</span>
-              {/* Test Cases ({totalCases}) */}
+              <span>
+                {t('projectViewer.testCasesTab', 'Test Cases')} ({filteredCases.length !== totalCases ? `${filteredCases.length}/${totalCases}` : totalCases})
+              </span>
             </button>
             <button
               className={`btn btn-sm ${activeTab === 'health' ? 'btn-primary' : 'btn-secondary'}`}
@@ -316,7 +344,7 @@ export default function ProjectViewerPage() {
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
               <BarChart3 size={15} />
-              <span>{t('projectViewer.tabHealth', 'Execution & Health Summary')}</span>
+              <span>{t('projectViewer.dashboardTab', 'Execution & Health Summary')}</span>
             </button>
           </div>
 
@@ -343,9 +371,9 @@ export default function ProjectViewerPage() {
         {activeTab === 'cases' && (
           <div>
             {/* Filters Bar */}
-            <div className="card" style={{ padding: '16px 20px', marginBottom: 20 }}>
-              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-                <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
+            <div className="card" style={{ padding: '16px 20px', marginBottom: 16 }}>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
                   <Search size={14} style={{ position: 'absolute', left: 10, top: 11, color: 'var(--foreground-muted)' }} />
                   <input
                     type="text"
@@ -361,9 +389,13 @@ export default function ProjectViewerPage() {
                   <Filter size={14} style={{ color: 'var(--foreground-muted)' }} />
                   <select
                     className="form-control"
-                    style={{ width: 170, height: 36, fontSize: 13 }}
+                    style={{ width: 160, height: 36, fontSize: 13 }}
                     value={selectedModule}
-                    onChange={e => setSelectedModule(e.target.value)}
+                    onChange={e => {
+                      setSelectedModule(e.target.value);
+                      setSelectedFeature('');
+                    }}
+                    id="filter-module-select"
                   >
                     <option value="">{t('projectViewer.allModules', 'All Modules')}</option>
                     {modules.map(m => (
@@ -374,22 +406,37 @@ export default function ProjectViewerPage() {
 
                 <select
                   className="form-control"
-                  style={{ width: 140, height: 36, fontSize: 13 }}
-                  value={selectedPriority}
-                  onChange={e => setSelectedPriority(e.target.value)}
+                  style={{ width: 170, height: 36, fontSize: 13 }}
+                  value={selectedFeature}
+                  onChange={e => setSelectedFeature(e.target.value)}
+                  id="filter-feature-select"
+                  disabled={availableFeatures.length === 0}
                 >
-                  <option value="">{t('projectViewer.allPriorities', 'All Priorities')}</option>
-                  <option value="critical">{t('projectViewer.priorityCritical', 'Critical')}</option>
-                  <option value="high">{t('projectViewer.priorityHigh', 'High')}</option>
-                  <option value="medium">{t('projectViewer.priorityMedium', 'Medium')}</option>
-                  <option value="low">{t('projectViewer.priorityLow', 'Low')}</option>
+                  <option value="">{t('projectViewer.allFeatures', 'All Features')}</option>
+                  {availableFeatures.map(f => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
                 </select>
 
                 <select
                   className="form-control"
-                  style={{ width: 140, height: 36, fontSize: 13 }}
+                  style={{ width: 145, height: 36, fontSize: 13 }}
+                  value={selectedPrepStatus}
+                  onChange={e => setSelectedPrepStatus(e.target.value)}
+                  id="filter-prep-select"
+                >
+                  <option value="">{t('projectViewer.allPreparation', 'All Preparation')}</option>
+                  <option value="ready">{t('projectViewer.prepReady', 'Ready')}</option>
+                  <option value="in_progress">{t('projectViewer.prepInProgress', 'In Progress')}</option>
+                  <option value="draft">{t('projectViewer.prepDraft', 'Draft')}</option>
+                </select>
+
+                <select
+                  className="form-control"
+                  style={{ width: 135, height: 36, fontSize: 13 }}
                   value={selectedResult}
                   onChange={e => setSelectedResult(e.target.value)}
+                  id="filter-result-select"
                 >
                   <option value="">{t('projectViewer.allResults', 'All Results')}</option>
                   <option value="pass">{t('projectViewer.resultPass', 'Pass')}</option>
@@ -397,7 +444,50 @@ export default function ProjectViewerPage() {
                   <option value="blocked">{t('projectViewer.resultBlocked', 'Blocked')}</option>
                   <option value="not_run">{t('projectViewer.resultNotRun', 'Not Run')}</option>
                 </select>
+
+                <select
+                  className="form-control"
+                  style={{ width: 135, height: 36, fontSize: 13 }}
+                  value={selectedPriority}
+                  onChange={e => setSelectedPriority(e.target.value)}
+                  id="filter-priority-select"
+                >
+                  <option value="">{t('projectViewer.allPriorities', 'All Priorities')}</option>
+                  <option value="critical">{t('projectViewer.priorityCritical', 'Critical')}</option>
+                  <option value="high">{t('projectViewer.priorityHigh', 'High')}</option>
+                  <option value="medium">{t('projectViewer.priorityMedium', 'Medium')}</option>
+                  <option value="low">{t('projectViewer.priorityLow', 'Low')}</option>
+                </select>
               </div>
+            </div>
+
+            {/* Filter Results Summary */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, fontSize: 13, color: 'var(--foreground-muted)' }}>
+              <span>
+                {filteredCases.length === totalCases
+                  ? t('projectViewer.showingAllCases', 'Showing all {count} test cases').replace('{count}', String(totalCases))
+                  : t('projectViewer.showingFilteredCases', 'Showing {filtered} of {total} test cases (filtered)')
+                      .replace('{filtered}', String(filteredCases.length))
+                      .replace('{total}', String(totalCases))}
+              </span>
+              {(selectedModule || selectedFeature || selectedPrepStatus || selectedResult || selectedPriority || search.trim()) && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: 11, padding: '2px 8px', height: 26 }}
+                  onClick={() => {
+                    setSearch('');
+                    setSelectedModule('');
+                    setSelectedFeature('');
+                    setSelectedPrepStatus('');
+                    setSelectedResult('');
+                    setSelectedPriority('');
+                  }}
+                  id="btn-reset-filters"
+                >
+                  {t('projectViewer.resetFilters', 'Reset Filters')}
+                </button>
+              )}
             </div>
 
             {/* Test Cases Table */}

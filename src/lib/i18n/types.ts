@@ -352,6 +352,15 @@ export interface TranslationDictionary {
     allModules: string;
     allPriorities: string;
     allResults: string;
+    allFeatures: string;
+    filterFeature: string;
+    allPreparation: string;
+    prepReady: string;
+    prepInProgress: string;
+    prepDraft: string;
+    showingAllCases: string;
+    showingFilteredCases: string;
+    resetFilters: string;
     noCasesFound: string;
     noCasesCreated: string;
     noCasesMatch: string;
