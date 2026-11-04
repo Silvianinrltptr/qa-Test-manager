@@ -395,28 +395,6 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
                   );
                 })}
               </tbody>
-              <tfoot>
-                <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)', background: 'var(--surface-2)' }}>
-                  <td style={{ textAlign: 'left' }}>{t('common.total', 'Total')}</td>
-                  <td style={{ textAlign: 'right' }}>{totals.total}</td>
-                  <td style={{ textAlign: 'right', color: 'var(--success)' }}>{totals.ready}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    {totals.executed}
-                    {totals.unclassified > 0 && (
-                      <span
-                        title={`${totals.unclassified} test case(s) with execution attempt unclassified (needs review)`}
-                        style={{ marginLeft: 4, cursor: 'help' }}
-                      >
-                        ⚠️
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ textAlign: 'right', color: 'var(--success)' }}>{totals.pass}</td>
-                  <td style={{ textAlign: 'right', color: totals.fail > 0 ? 'var(--error)' : 'inherit' }}>{totals.fail}</td>
-                  <td style={{ textAlign: 'right', color: totals.blocked > 0 ? 'var(--warning)' : 'inherit' }}>{totals.blocked}</td>
-                  <td style={{ textAlign: 'right', color: 'var(--foreground-muted)' }}>{totals.not_run}</td>
-                </tr>
-              </tfoot>
             </table>
           </div>
           {totals.unclassified > 0 && (

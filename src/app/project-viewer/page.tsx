@@ -718,28 +718,6 @@ export default function ProjectViewerPage() {
                         );
                       })}
                     </tbody>
-                    <tfoot>
-                      <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)', background: 'var(--surface-2)' }}>
-                        <td style={{ textAlign: 'left' }}>{t('projectViewer.colTotal', 'Total')}</td>
-                        <td style={{ textAlign: 'right' }}>{pmModuleTotals.total}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--success)' }}>{pmModuleTotals.ready}</td>
-                        <td style={{ textAlign: 'right' }}>
-                          {pmModuleTotals.executed}
-                          {pmModuleTotals.unclassified > 0 && (
-                            <span
-                              title={`${pmModuleTotals.unclassified} test case(s) with execution attempt unclassified (needs review)`}
-                              style={{ marginLeft: 4, cursor: 'help' }}
-                            >
-                              ⚠️
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ textAlign: 'right', color: 'var(--success)' }}>{pmModuleTotals.pass}</td>
-                        <td style={{ textAlign: 'right', color: pmModuleTotals.fail > 0 ? 'var(--error)' : 'inherit' }}>{pmModuleTotals.fail}</td>
-                        <td style={{ textAlign: 'right', color: pmModuleTotals.blocked > 0 ? 'var(--warning)' : 'inherit' }}>{pmModuleTotals.blocked}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--foreground-muted)' }}>{pmModuleTotals.not_run}</td>
-                      </tr>
-                    </tfoot>
                   </table>
                 </div>
                 {pmModuleTotals.unclassified > 0 && (
