@@ -33,6 +33,7 @@ export interface TranslationDictionary {
     copy: string;
     copied: string;
     total: string;
+    totalTC: string;
     view: string;
     select: string;
     details: string;
@@ -121,6 +122,7 @@ export interface TranslationDictionary {
     qualityDistribution: string;
     emptyActivity: string;
     failedToLoad: string;
+    unclassifiedNotice: string;
   };
   modules: {
     title: string;
@@ -203,6 +205,30 @@ export interface TranslationDictionary {
     filterByPriority: string;
     filterByPrepStatus: string;
     filterByExecResult: string;
+    selectAllFiltered: string;
+    deselectAll: string;
+    selectedCount: string;
+    runSelected: string;
+    includePassed: string;
+    includePassedDesc: string;
+    createTestRun: string;
+    testRunName: string;
+    testRunDesc: string;
+    testEnvironment: string;
+    selectedCasesToRun: string;
+    totalSelected: string;
+    confirmCreateRun: string;
+    orderNotice: string;
+    removeCase: string;
+    bulkUpdatePrepStatus: string;
+    newPrepStatus: string;
+    matchingActiveCases: string;
+    currentDistribution: string;
+    casesToUpdate: string;
+    alreadyInTarget: string;
+    confirmUpdatePrep: string;
+    noCasesToUpdateMessage: string;
+    activeScopeOnlyNotice: string;
   };
   feedback: {
     title: string;
@@ -276,6 +302,20 @@ export interface TranslationDictionary {
     isRetest: string;
     recentExecutions: string;
     saveExecution: string;
+    testRunWorkspace: string;
+    testRunSummary: string;
+    progress: string;
+    passRate: string;
+    prevCase: string;
+    nextCase: string;
+    saveAndNext: string;
+    backToSummary: string;
+    backToTestCases: string;
+    evidencePlaceholder: string;
+    notesPlaceholder: string;
+    unsavedWarning: string;
+    runCompletedNotice: string;
+    historyOfRuns: string;
   };
   impactAnalysis: {
     title: string;
@@ -390,11 +430,14 @@ export interface TranslationDictionary {
     progressByModule: string;
     colModule: string;
     colTotal: string;
+    colTotalTC: string;
     colReady: string;
     colExecuted: string;
     colPass: string;
     colFail: string;
     colBlocked: string;
+    colNotRun: string;
+    unclassifiedNotice: string;
     lblPreconditions: string;
     lblTestData: string;
     lblTestSteps: string;

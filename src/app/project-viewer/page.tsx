@@ -273,6 +273,22 @@ export default function ProjectViewerPage() {
   const notRunCases = testCases.filter(c => c.latest_result === 'not_run').length;
   const passRate = totalCases > 0 ? Math.round((passCases / totalCases) * 100) : 0;
 
+  const pmModuleTotals = useMemo(() => {
+    return (dashboardMetrics?.byModule || []).reduce(
+      (acc, m) => ({
+        total: acc.total + (m.total || 0),
+        ready: acc.ready + (m.ready || 0),
+        executed: acc.executed + (m.executed || 0),
+        pass: acc.pass + (m.pass || 0),
+        fail: acc.fail + (m.fail || 0),
+        blocked: acc.blocked + (m.blocked || 0),
+        not_run: acc.not_run + (m.not_run ?? Math.max(0, (m.ready || 0) - (m.executed || 0))),
+        unclassified: acc.unclassified + (m.unclassified || 0),
+      }),
+      { total: 0, ready: 0, executed: 0, pass: 0, fail: 0, blocked: 0, not_run: 0, unclassified: 0 }
+    );
+  }, [dashboardMetrics?.byModule]);
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)', display: 'flex', flexDirection: 'column' }}>
       {/* Top Banner / Navigation for Project Viewer */}
@@ -584,27 +600,29 @@ export default function ProjectViewerPage() {
             <div className="grid-4" style={{ marginBottom: 24 }}>
               <div className="metric-card">
                 <div className="metric-label">{t('projectViewer.statTotalCases', 'Total Test Cases')}</div>
-                <div className="metric-value">{totalCases}</div>
+                <div className="metric-value">{dashboardMetrics ? dashboardMetrics.totalActive : totalCases}</div>
                 <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>{t('projectViewer.statAcrossModules', 'Across all modules')}</div>
               </div>
 
               <div className="metric-card" style={{ borderLeft: '4px solid var(--success)' }}>
                 <div className="metric-label" style={{ color: 'var(--success)' }}>{t('projectViewer.statPassingTests', 'Passing Tests')}</div>
-                <div className="metric-value" style={{ color: 'var(--success)' }}>{passCases}</div>
-                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>{t('projectViewer.statPassRate', 'Pass rate')}: {passRate}%</div>
+                <div className="metric-value" style={{ color: 'var(--success)' }}>{dashboardMetrics ? dashboardMetrics.results.pass : passCases}</div>
+                <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>{t('projectViewer.statPassRate', 'Pass rate')}: {dashboardMetrics?.passRate.pct != null ? `${dashboardMetrics.passRate.pct}%` : `${passRate}%`}</div>
               </div>
 
               <div className="metric-card" style={{ borderLeft: '4px solid var(--error)' }}>
                 <div className="metric-label" style={{ color: 'var(--error)' }}>{t('projectViewer.statFailingTests', 'Failing Tests')}</div>
-                <div className="metric-value" style={{ color: 'var(--error)' }}>{failCases}</div>
+                <div className="metric-value" style={{ color: 'var(--error)' }}>{dashboardMetrics ? dashboardMetrics.results.fail : failCases}</div>
                 <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>{t('projectViewer.statDefectCandidates', 'Open defect candidates')}</div>
               </div>
 
               <div className="metric-card" style={{ borderLeft: '4px solid var(--warning)' }}>
                 <div className="metric-label" style={{ color: 'var(--warning)' }}>{t('projectViewer.statBlockedNotRun', 'Blocked / Not Run')}</div>
-                <div className="metric-value" style={{ color: 'var(--warning)' }}>{blockedCases + notRunCases}</div>
+                <div className="metric-value" style={{ color: 'var(--warning)' }}>
+                  {dashboardMetrics ? (dashboardMetrics.results.blocked + dashboardMetrics.results.not_run) : (blockedCases + notRunCases)}
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
-                  {blockedCases} {t('projectViewer.statBlocked', 'blocked')}, {notRunCases} {t('projectViewer.statNotRun', 'not run')}
+                  {dashboardMetrics ? dashboardMetrics.results.blocked : blockedCases} {t('projectViewer.statBlocked', 'blocked')}, {dashboardMetrics ? dashboardMetrics.results.not_run : notRunCases} {t('projectViewer.statNotRun', 'not run')}
                 </div>
               </div>
             </div>
@@ -659,37 +677,79 @@ export default function ProjectViewerPage() {
                   <table>
                     <thead>
                       <tr>
-                        <th>{t('projectViewer.colModule', 'Module')}</th>
-                        <th>{t('projectViewer.colTotal', 'Total')}</th>
-                        <th>{t('projectViewer.colReady', 'Ready')}</th>
-                        <th>{t('projectViewer.colExecuted', 'Executed')}</th>
-                        <th>{t('projectViewer.colPass', 'Pass')}</th>
-                        <th>{t('projectViewer.colFail', 'Fail')}</th>
-                        <th>{t('projectViewer.colBlocked', 'Blocked')}</th>
-                        <th>{t('projectViewer.prepProgress', 'Preparation')}</th>
+                        <th style={{ textAlign: 'left' }}>{t('projectViewer.colModule', 'Module')}</th>
+                        <th style={{ textAlign: 'right' }}>{t('projectViewer.colTotalTC', 'Total TC')}</th>
+                        <th style={{ textAlign: 'right' }}>{t('projectViewer.colReady', 'Ready')}</th>
+                        <th style={{ textAlign: 'right' }}>{t('projectViewer.colExecuted', 'Executed')}</th>
+                        <th style={{ textAlign: 'right' }}>{t('projectViewer.colPass', 'Pass')}</th>
+                        <th style={{ textAlign: 'right' }}>{t('projectViewer.colFail', 'Fail')}</th>
+                        <th style={{ textAlign: 'right' }}>{t('projectViewer.colBlocked', 'Blocked')}</th>
+                        <th style={{ textAlign: 'right' }}>{t('projectViewer.colNotRun', 'Not Run')}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {dashboardMetrics.byModule.map(mod => (
-                        <tr key={mod.module}>
-                          <td>
-                            <div style={{ fontWeight: 600 }}>{mod.module}</div>
-                            <div style={{ fontSize: 11, color: 'var(--foreground-muted)' }}>{mod.prefix}</div>
-                          </td>
-                          <td>{mod.total}</td>
-                          <td style={{ color: 'var(--success)' }}>{mod.ready}</td>
-                          <td>{mod.executed}</td>
-                          <td style={{ color: 'var(--success)' }}>{mod.pass}</td>
-                          <td style={{ color: mod.fail > 0 ? 'var(--error)' : 'inherit' }}>{mod.fail}</td>
-                          <td style={{ color: mod.blocked > 0 ? 'var(--warning)' : 'inherit' }}>{mod.blocked}</td>
-                          <td style={{ minWidth: 120 }}>
-                            <ProgressBar value={mod.ready} max={mod.total} />
-                          </td>
-                        </tr>
-                      ))}
+                      {dashboardMetrics.byModule.map(mod => {
+                        const modNotRun = mod.not_run ?? Math.max(0, mod.ready - mod.executed);
+                        const hasUnclassified = (mod.unclassified || 0) > 0;
+                        return (
+                          <tr key={mod.module}>
+                            <td style={{ textAlign: 'left' }}>
+                              <div style={{ fontWeight: 600 }}>{mod.module}</div>
+                              <div style={{ fontSize: 11, color: 'var(--foreground-muted)' }}>{mod.prefix}</div>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>{mod.total}</td>
+                            <td style={{ textAlign: 'right', color: 'var(--success)' }}>{mod.ready}</td>
+                            <td style={{ textAlign: 'right' }}>
+                              {mod.executed}
+                              {hasUnclassified && (
+                                <span
+                                  title={`${mod.unclassified} test case(s) with execution attempt unclassified (needs review)`}
+                                  style={{ marginLeft: 4, cursor: 'help' }}
+                                >
+                                  ⚠️
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ textAlign: 'right', color: 'var(--success)' }}>{mod.pass}</td>
+                            <td style={{ textAlign: 'right', color: mod.fail > 0 ? 'var(--error)' : 'inherit' }}>{mod.fail}</td>
+                            <td style={{ textAlign: 'right', color: mod.blocked > 0 ? 'var(--warning)' : 'inherit' }}>{mod.blocked}</td>
+                            <td style={{ textAlign: 'right', color: 'var(--foreground-muted)' }}>{modNotRun}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
+                    <tfoot>
+                      <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)', background: 'var(--surface-2)' }}>
+                        <td style={{ textAlign: 'left' }}>{t('projectViewer.colTotal', 'Total')}</td>
+                        <td style={{ textAlign: 'right' }}>{pmModuleTotals.total}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--success)' }}>{pmModuleTotals.ready}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          {pmModuleTotals.executed}
+                          {pmModuleTotals.unclassified > 0 && (
+                            <span
+                              title={`${pmModuleTotals.unclassified} test case(s) with execution attempt unclassified (needs review)`}
+                              style={{ marginLeft: 4, cursor: 'help' }}
+                            >
+                              ⚠️
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'right', color: 'var(--success)' }}>{pmModuleTotals.pass}</td>
+                        <td style={{ textAlign: 'right', color: pmModuleTotals.fail > 0 ? 'var(--error)' : 'inherit' }}>{pmModuleTotals.fail}</td>
+                        <td style={{ textAlign: 'right', color: pmModuleTotals.blocked > 0 ? 'var(--warning)' : 'inherit' }}>{pmModuleTotals.blocked}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--foreground-muted)' }}>{pmModuleTotals.not_run}</td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
+                {pmModuleTotals.unclassified > 0 && (
+                  <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--warning-light, rgba(234, 179, 8, 0.1))', border: '1px solid var(--warning)', borderRadius: 6, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--foreground)' }}>
+                    <span>⚠️</span>
+                    <span>
+                      {t('projectViewer.unclassifiedNotice', 'Note: There is {count} test case with an execution attempt whose result is unclassified (needs review).').replace('{count}', String(pmModuleTotals.unclassified))}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

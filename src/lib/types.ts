@@ -76,6 +76,7 @@ export interface TestCase {
 export interface Execution {
   id: number;
   test_case_id: number;
+  test_run_id?: number | null;
   exec_date: string;
   environment: string | null;
   actual_result: string | null;
@@ -86,6 +87,56 @@ export interface Execution {
   is_retest: number;
   case_id?: string;
   title?: string;
+}
+
+export type TestRunStatus = 'in_progress' | 'completed';
+
+export interface TestRun {
+  id: number;
+  name: string;
+  description: string | null;
+  environment: string | null;
+  status: TestRunStatus;
+  created_at: string;
+  updated_at: string;
+  total_cases?: number;
+  passed_cases?: number;
+  failed_cases?: number;
+  blocked_cases?: number;
+  not_run_cases?: number;
+  progress_pct?: number;
+  pass_rate_pct?: number;
+}
+
+export interface TestRunItem {
+  id: number;
+  test_run_id: number;
+  test_case_id: number;
+  order_index: number;
+  status: TestResult;
+  actual_result: string | null;
+  evidence: string | null;
+  defect_ref: string | null;
+  notes: string | null;
+  executed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields from test_cases, modules, features
+  case_id?: string;
+  title?: string;
+  module_id?: number;
+  module_name?: string;
+  feature_id?: number;
+  feature_name?: string;
+  priority?: Priority;
+  test_type?: TestType;
+  preconditions?: string | null;
+  test_steps?: string | null;
+  test_data?: string | null;
+  expected_result?: string | null;
+  requirement_ref?: string | null;
+  prep_status?: PrepStatus;
+  latest_result?: TestResult;
 }
 
 export interface ChangeLog {
@@ -125,10 +176,21 @@ export interface WeeklySnapshot {
 
 export interface DashboardMetrics {
   totalActive: number;
-  byModule: { module: string; prefix: string; total: number; ready: number; executed: number; pass: number; fail: number; blocked: number }[];
+  byModule: {
+    module: string;
+    prefix: string;
+    total: number;
+    ready: number;
+    executed: number;
+    pass: number;
+    fail: number;
+    blocked: number;
+    not_run?: number;
+    unclassified?: number;
+  }[];
   prepProgress: { ready: number; total: number; pct: number | null };
   execProgress: { executed: number; readyTotal: number; pct: number | null };
-  results: { pass: number; fail: number; blocked: number; not_run: number };
+  results: { pass: number; fail: number; blocked: number; not_run: number; unclassified?: number };
   passRate: { pass: number; total: number; pct: number | null };
   notReady: number;
   recentActivity: ActivityLog[];

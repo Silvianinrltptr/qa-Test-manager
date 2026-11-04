@@ -116,6 +116,7 @@ model TestCase {
   executions      Execution[]
   comments        TestCaseComment[]
   translations    TestCaseTranslation[]
+  testRunItems    TestRunItem[]
 
   @@map("test_cases")
 }
@@ -131,11 +132,51 @@ model TcSequence {
 }
 
 // -------------------------------------------------------------
+// Test Runs (Bulk Test Execution Sessions)
+// -------------------------------------------------------------
+model TestRun {
+  id          Int           @id @default(autoincrement())
+  name        String
+  description String?
+  environment String?       @default("STG")
+  status      String        @default("in_progress")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at")
+
+  items       TestRunItem[]
+  executions  Execution[]
+
+  @@map("test_runs")
+}
+
+model TestRunItem {
+  id           Int       @id @default(autoincrement())
+  testRunId    Int       @map("test_run_id")
+  testCaseId   Int       @map("test_case_id")
+  orderIndex   Int       @default(0) @map("order_index")
+  status       String    @default("not_run")
+  actualResult String?   @map("actual_result")
+  evidence     String?
+  defectRef    String?   @map("defect_ref")
+  notes        String?
+  executedAt   DateTime? @map("executed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  testRun      TestRun   @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  testCase     TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@unique([testRunId, testCaseId])
+  @@map("test_run_items")
+}
+
+// -------------------------------------------------------------
 // Executions
 // -------------------------------------------------------------
 model Execution {
   id           Int      @id @default(autoincrement())
   testCaseId   Int      @map("test_case_id")
+  testRunId    Int?     @map("test_run_id")
   execDate     DateTime @default(now()) @map("exec_date")
   environment  String?
   actualResult String?  @map("actual_result")
@@ -146,6 +187,7 @@ model Execution {
   isRetest     Int?     @default(0) @map("is_retest")
 
   testCase     TestCase @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  testRun      TestRun? @relation(fields: [testRunId], references: [id], onDelete: SetNull)
 
   @@map("executions")
 }

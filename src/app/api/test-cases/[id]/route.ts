@@ -111,10 +111,11 @@ export async function PUT(req: NextRequest, ctx: RouteContext<'/api/test-cases/[
         : body.lifecycle_status === 'archived' ? 'archived'
         : 'lifecycle_changed';
       
+      const reason = body.reason || (body.lifecycle_status === 'obsolete' ? 'Bulk Delete' : undefined);
       await logChange(db, {
         entityType: 'test_case', entityId: Number(id), entityRef: old.case_id as string,
         changeType, changedFields: changedFields.join(', '),
-        oldValues: oldVals, newValues: newVals, reason: body.reason
+        oldValues: { ...old, ...oldVals }, newValues: newVals, reason
       });
     } else if (changedFields.length > 0) {
       await logChange(db, {
@@ -216,7 +217,7 @@ export async function DELETE(req: NextRequest, ctx: RouteContext<'/api/test-case
     const db = getDb();
     const { id } = await ctx.params;
 
-    const tc = (await db.prepare('SELECT * FROM test_cases WHERE id = ?').get(Number(id))) as { case_id: string; title: string; lifecycle_status: string } | undefined;
+    const tc = (await db.prepare('SELECT * FROM test_cases WHERE id = ?').get(Number(id))) as Record<string, any> | undefined;
     if (!tc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     // Soft delete - mark as archived
@@ -224,7 +225,10 @@ export async function DELETE(req: NextRequest, ctx: RouteContext<'/api/test-case
     await logActivity(db, 'archived', 'test_case', Number(id), tc.case_id, `Test case "${tc.title}" archived`);
     await logChange(db, {
       entityType: 'test_case', entityId: Number(id), entityRef: tc.case_id,
-      changeType: 'archived', oldValues: { lifecycle_status: tc.lifecycle_status }
+      changeType: 'archived',
+      reason: 'Row Delete',
+      oldValues: { ...tc, lifecycle_status: tc.lifecycle_status },
+      newValues: { lifecycle_status: 'archived' }
     });
 
     return NextResponse.json({ success: true });

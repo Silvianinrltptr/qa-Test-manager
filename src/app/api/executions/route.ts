@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
     const db = getDb();
     const body = await req.json();
-    const { test_case_id, exec_date, environment, actual_result, result, evidence, defect_ref, notes, is_retest } = body;
+    const { test_case_id, test_run_id, exec_date, environment, actual_result, result, evidence, defect_ref, notes, is_retest } = body;
 
     if (!test_case_id || !result) {
       return NextResponse.json({ error: 'test_case_id and result are required' }, { status: 400 });
@@ -55,14 +55,45 @@ export async function POST(req: NextRequest) {
 
     // Insert execution
     const execResult = await db.prepare(`
-      INSERT INTO executions (test_case_id, exec_date, environment, actual_result, result, evidence, defect_ref, notes, is_retest)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO executions (test_case_id, test_run_id, exec_date, environment, actual_result, result, evidence, defect_ref, notes, is_retest)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       Number(test_case_id),
+      test_run_id ? Number(test_run_id) : null,
       exec_date ? new Date(exec_date) : new Date(),
       environment || null, actual_result || null, result,
       evidence || null, defect_ref || null, notes || null, is_retest ? 1 : 0
     );
+
+    // If part of a test run, update test_run_items
+    if (test_run_id) {
+      await db.prepare(`
+        UPDATE test_run_items
+        SET status = ?, actual_result = ?, evidence = ?, defect_ref = ?, notes = ?, executed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE test_run_id = ? AND test_case_id = ?
+      `).run(
+        result,
+        actual_result || null,
+        evidence || null,
+        defect_ref || null,
+        notes || null,
+        Number(test_run_id),
+        Number(test_case_id)
+      );
+
+      // Check if all items in test run are completed (pass, fail, or blocked)
+      const pendingItems = (await db.prepare(`
+        SELECT COUNT(*) as count FROM test_run_items
+        WHERE test_run_id = ? AND status = 'not_run'
+      `).get(Number(test_run_id))) as { count: number } | undefined;
+
+      const runStatus = (pendingItems && Number(pendingItems.count) === 0) ? 'completed' : 'in_progress';
+      await db.prepare(`
+        UPDATE test_runs
+        SET status = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(runStatus, Number(test_run_id));
+    }
 
     // Update test case latest result and exec status
     await db.prepare(`

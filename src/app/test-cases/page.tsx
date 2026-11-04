@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { ResultBadge, PriorityBadge, PrepBadge, LifecycleBadge, TypeBadge, EmptyState, LoadingSpinner, Pagination } from '@/components/ui/Shared';
 import { useToast } from '@/components/ui/Toast';
-import { Plus, Search, Filter, Download, Edit2, Eye, Trash2, ClipboardList, SortAsc, SortDesc, ChevronDown, X, Play, RotateCcw, Globe } from 'lucide-react';
+import { Plus, Search, Filter, Download, Edit2, Eye, Trash2, ClipboardList, SortAsc, SortDesc, ChevronDown, ChevronRight, X, Play, RotateCcw, Globe, Layers, Check, ArrowRight } from 'lucide-react';
 import type { TestCase, Module, Feature, Execution, TestCaseComment } from '@/lib/types';
 import { TEST_TYPES, PRIORITIES, PREP_STATUSES, LIFECYCLE_STATUSES } from '@/lib/types';
 import { useI18n } from '@/lib/i18n/context';
@@ -32,6 +33,7 @@ const EXEC_RESULTS = [
 ];
 
 export default function TestCasesPage() {
+  const router = useRouter();
   const toast = useToast();
   const { t, locale } = useI18n();
   const [testCases, setTestCases] = useState<TestCase[]>([]);
@@ -40,10 +42,53 @@ export default function TestCasesPage() {
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 20, totalPages: 1 });
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const headerCheckboxRef = useRef<HTMLInputElement>(null);
+  const [selectingAll, setSelectingAll] = useState(false);
+  const [showTestRunModal, setShowTestRunModal] = useState(false);
+  const [creatingRun, setCreatingRun] = useState(false);
+  const [testRunForm, setTestRunForm] = useState({
+    name: '',
+    description: '',
+    environment: 'STG',
+  });
+  const [selectedCasesData, setSelectedCasesData] = useState<TestCase[]>([]);
+  const [loadingSelectedCases, setLoadingSelectedCases] = useState(false);
+
+  // Bulk Update Preparation Status State
+  const [showBulkPrepModal, setShowBulkPrepModal] = useState(false);
+  const [showAffectedCases, setShowAffectedCases] = useState(false);
+  const [bulkPrepNewStatus, setBulkPrepNewStatus] = useState<'draft' | 'in_progress' | 'ready'>('ready');
+  const [bulkPrepPreview, setBulkPrepPreview] = useState<{
+    total_matching_active: number;
+    distribution: { draft: number; in_progress: number; ready: number };
+    new_status: string | null;
+    cases_to_update: number;
+    already_in_target: number;
+    affected_cases?: Array<{
+      id: number;
+      case_id: string;
+      feature_name: string;
+      current_prep_status: string;
+      new_prep_status: string;
+      will_change: boolean;
+    }>;
+    sample_cases?: Array<{
+      id: number;
+      case_id: string;
+      title: string;
+      module_name: string;
+      feature_name: string;
+      current_prep_status: string;
+      will_change: boolean;
+    }>;
+  } | null>(null);
+  const [loadingBulkPrepPreview, setLoadingBulkPrepPreview] = useState(false);
+  const [executingBulkPrep, setExecutingBulkPrep] = useState(false);
   const [viewCase, setViewCase] = useState<TestCase | null>(null);
   const [editCase, setEditCase] = useState<TestCase | null>(null);
   const [execCase, setExecCase] = useState<TestCase | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TestCase | null>(null);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [translating, setTranslating] = useState(false);
@@ -101,7 +146,10 @@ export default function TestCasesPage() {
       .catch(() => setFeatures([]));
   }, []);
 
-  useEffect(() => { fetchData(1); }, [filters, sortBy, sortDir, locale]);
+  useEffect(() => {
+    setSelected(new Set());
+    fetchData(1);
+  }, [filters, sortBy, sortDir, locale]);
 
   const safeFeatures = Array.isArray(features) ? features : [];
   const filteredFeatures = safeFeatures.filter(f => !filters.moduleId || f.module_id === Number(filters.moduleId));
@@ -191,23 +239,47 @@ export default function TestCasesPage() {
     try {
       const res = await fetch(`/api/test-cases/${deleteTarget.id}`, { method: 'DELETE' });
       if (res.ok) {
-        toast.success('Test case archived');
+        toast.success(locale === 'id' ? 'Test case berhasil dihapus' : 'Test case deleted');
         setDeleteTarget(null);
         fetchData(pagination.page);
+      } else {
+        const e = await res.json().catch(() => ({}));
+        toast.error(e.error || (locale === 'id' ? 'Gagal menghapus test case' : 'Failed to delete test case'));
       }
+    } catch {
+      toast.error(locale === 'id' ? 'Terjadi kesalahan jaringan saat menghapus test case' : 'Network error deleting test case');
     } finally { setSaving(false); }
   };
 
-  const bulkMarkObsolete = async () => {
-    for (const id of selected) {
-      await fetch(`/api/test-cases/${id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lifecycle_status: 'obsolete' })
-      });
+  const handleConfirmBulkDelete = async () => {
+    if (selected.size === 0) return;
+    setSaving(true);
+    try {
+      const count = selected.size;
+      for (const id of selected) {
+        await fetch(`/api/test-cases/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lifecycle_status: 'obsolete', reason: 'Bulk Delete' })
+        });
+      }
+      toast.success(
+        locale === 'id'
+          ? `${count} test case berhasil ditandai sebagai obsolete`
+          : `${count} test case${count > 1 ? 's' : ''} marked as obsolete`
+      );
+      setSelected(new Set());
+      setShowBulkDeleteModal(false);
+      fetchData(pagination.page);
+    } catch {
+      toast.error(
+        locale === 'id'
+          ? 'Gagal menghapus test cases'
+          : 'Failed to delete selected test cases'
+      );
+    } finally {
+      setSaving(false);
     }
-    toast.success(`${selected.size} test case${selected.size > 1 ? 's' : ''} marked as obsolete`);
-    setSelected(new Set());
-    fetchData(pagination.page);
   };
 
   const toggleSelect = (id: number) => {
@@ -218,9 +290,160 @@ export default function TestCasesPage() {
     });
   };
 
-  const selectAll = () => {
-    if (selected.size === testCases.length) setSelected(new Set());
-    else setSelected(new Set(testCases.map(tc => tc.id)));
+  const isAllSelected = pagination.total > 0 && selected.size === pagination.total;
+  const isIndeterminate = selected.size > 0 && selected.size < pagination.total;
+
+  useEffect(() => {
+    if (headerCheckboxRef.current) {
+      headerCheckboxRef.current.indeterminate = isIndeterminate;
+    }
+  }, [isIndeterminate]);
+
+  // Header checkbox: Sole control for Select All / Deselect All across active filter
+  const handleToggleHeaderSelect = async () => {
+    // If all are selected, clicking deselects all
+    if (isAllSelected) {
+      setSelected(new Set());
+      return;
+    }
+
+    // Otherwise (0 or partially selected), select all matching active filter across all pages
+    setSelectingAll(true);
+    try {
+      const params = new URLSearchParams({
+        selectIdsOnly: 'true',
+        lifecycle: filters.lifecycle,
+        ...(filters.search && { search: filters.search }),
+        ...(filters.moduleId && { moduleId: filters.moduleId }),
+        ...(filters.featureId && { featureId: filters.featureId }),
+        ...(filters.priority && { priority: filters.priority }),
+        ...(filters.prepStatus && { prepStatus: filters.prepStatus }),
+        ...(filters.latestResult && { latestResult: filters.latestResult }),
+        ...(filters.testType && { testType: filters.testType }),
+      });
+      const res = await fetch(`/api/test-cases?${params.toString()}`);
+      if (res.ok) {
+        const result = await res.json();
+        const rows: { id: number; latest_result: string }[] = result.data || [];
+        const newSelected = new Set(rows.map(r => r.id));
+        setSelected(newSelected);
+        toast.success(`${newSelected.size} ${t('testCases.selectedCount', 'test case(s) selected')}`);
+      } else {
+        toast.error('Failed to select filtered cases');
+      }
+    } catch {
+      toast.error('Failed to select filtered cases');
+    } finally {
+      setSelectingAll(false);
+    }
+  };
+
+  // Open Test Run confirmation modal
+  const openTestRunModal = async () => {
+    if (selected.size === 0) {
+      toast.error('Select at least one test case to run');
+      return;
+    }
+
+    setLoadingSelectedCases(true);
+    setShowTestRunModal(true);
+
+    // Default test run name with timestamp/context
+    const activeModuleObj = modules.find(m => String(m.id) === String(filters.moduleId));
+    const activeFeatureObj = filteredFeatures.find(f => String(f.id) === String(filters.featureId));
+    let defaultRunName = 'Test Run';
+    if (activeModuleObj && activeFeatureObj) {
+      defaultRunName = `${activeModuleObj.name} - ${activeFeatureObj.name} Run`;
+    } else if (activeModuleObj) {
+      defaultRunName = `${activeModuleObj.name} Regression Run`;
+    } else {
+      defaultRunName = `Suite Test Run - ${new Date().toISOString().split('T')[0]}`;
+    }
+
+    setTestRunForm({
+      name: defaultRunName,
+      description: '',
+      environment: 'STG',
+    });
+
+    try {
+      // Fetch details of selected test cases
+      const selectedIds = Array.from(selected);
+      // Fetch test cases to display in modal (limit up to 2000)
+      const res = await fetch(`/api/test-cases?limit=2000&lifecycle=all&lang=${locale}`);
+      if (res.ok) {
+        const d = await res.json();
+        const allFetched: TestCase[] = d.data || [];
+        const matched = allFetched.filter(tc => selected.has(tc.id));
+        // Sort strictly: Module name, Feature name, Case ID ASC
+        matched.sort((a, b) => {
+          const modA = a.module_name || '';
+          const modB = b.module_name || '';
+          if (modA !== modB) return modA.localeCompare(modB);
+          const featA = a.feature_name || '';
+          const featB = b.feature_name || '';
+          if (featA !== featB) return featA.localeCompare(featB);
+          return a.case_id.localeCompare(b.case_id);
+        });
+        setSelectedCasesData(matched);
+      }
+    } catch {
+      toast.error('Failed to load selected test case details');
+    } finally {
+      setLoadingSelectedCases(false);
+    }
+  };
+
+  // Remove single test case from selection in Test Run modal
+  const removeCaseFromRun = (id: number) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setSelectedCasesData(prev => prev.filter(tc => tc.id !== id));
+  };
+
+  // Create Test Run and redirect to Execution Workspace
+  const handleCreateTestRun = async () => {
+    if (!testRunForm.name.trim()) {
+      toast.error('Test Run Name is required');
+      return;
+    }
+    if (selected.size === 0) {
+      toast.error('At least one test case must be selected');
+      return;
+    }
+
+    setCreatingRun(true);
+    try {
+      const res = await fetch('/api/test-runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: testRunForm.name.trim(),
+          description: testRunForm.description.trim() || null,
+          environment: testRunForm.environment || 'STG',
+          testCaseIds: Array.from(selected),
+        }),
+      });
+
+      if (res.ok) {
+        const created = await res.json();
+        toast.success(`Test Run "${created.name}" created!`);
+        setShowTestRunModal(false);
+        setSelected(new Set());
+        // Redirect to Execution Workspace
+        router.push(`/execution?runId=${created.id}`);
+      } else {
+        const err = await res.json();
+        toast.error(err.error || 'Failed to create Test Run');
+      }
+    } catch {
+      toast.error('Network error creating Test Run');
+    } finally {
+      setCreatingRun(false);
+    }
   };
 
   const exportData = (format: 'csv' | 'xlsx') => {
@@ -268,6 +491,87 @@ export default function TestCasesPage() {
     }
   };
 
+  // Fetch Bulk Prep Status Preview
+  const fetchBulkPrepPreview = useCallback(async (targetStatus?: string) => {
+    setLoadingBulkPrepPreview(true);
+    try {
+      const status = targetStatus || bulkPrepNewStatus;
+      const params = new URLSearchParams({
+        newStatus: status,
+        lifecycle: filters.lifecycle,
+        ...(filters.search && { search: filters.search }),
+        ...(filters.moduleId && { moduleId: filters.moduleId }),
+        ...(filters.featureId && { featureId: filters.featureId }),
+        ...(filters.priority && { priority: filters.priority }),
+        ...(filters.prepStatus && { prepStatus: filters.prepStatus }),
+        ...(filters.latestResult && { latestResult: filters.latestResult }),
+        ...(filters.testType && { testType: filters.testType }),
+      });
+      const res = await fetch(`/api/test-cases/bulk-prep-status?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setBulkPrepPreview(data);
+      } else {
+        toast.error('Failed to load bulk update preview');
+      }
+    } catch {
+      toast.error('Network error loading preview');
+    } finally {
+      setLoadingBulkPrepPreview(false);
+    }
+  }, [filters, bulkPrepNewStatus, toast]);
+
+  const openBulkPrepModal = () => {
+    setBulkPrepPreview(null);
+    setShowAffectedCases(false);
+    setShowBulkPrepModal(true);
+    fetchBulkPrepPreview(bulkPrepNewStatus);
+  };
+
+  const handleChangeBulkPrepStatus = (status: 'draft' | 'in_progress' | 'ready') => {
+    setBulkPrepNewStatus(status);
+    fetchBulkPrepPreview(status);
+  };
+
+  // Re-calculate preview if filters change while modal is open (Requirement 4.5)
+  useEffect(() => {
+    if (showBulkPrepModal) {
+      fetchBulkPrepPreview(bulkPrepNewStatus);
+    }
+  }, [filters, showBulkPrepModal]);
+
+  const handleConfirmBulkPrepUpdate = async () => {
+    if (!bulkPrepPreview || bulkPrepPreview.cases_to_update === 0) return;
+    setExecutingBulkPrep(true);
+    try {
+      const res = await fetch('/api/test-cases/bulk-prep-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filters,
+          newStatus: bulkPrepNewStatus,
+          reason: 'Bulk Update Preparation Status via Test Cases filter',
+        }),
+      });
+
+      const result = await res.json();
+      if (res.ok && result.success) {
+        toast.success(
+          `Successfully updated ${result.updated_count} test case(s) to ${bulkPrepNewStatus.toUpperCase()}!`
+        );
+        setShowBulkPrepModal(false);
+        // Refresh table data
+        fetchData(pagination.page);
+      } else {
+        toast.error(result.message || result.error || 'Failed to update preparation status');
+      }
+    } catch {
+      toast.error('Network error executing bulk update');
+    } finally {
+      setExecutingBulkPrep(false);
+    }
+  };
+
   return (
     <AppShell>
       {/* Header */}
@@ -281,12 +585,26 @@ export default function TestCasesPage() {
             <Plus size={14} /> {t('testCases.createTestCase', 'New Test Case')}
           </button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {selected.size > 0 && (
-            <button className="btn btn-secondary btn-sm" onClick={bulkMarkObsolete}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setShowBulkDeleteModal(true)}
+              id="btn-bulk-delete"
+            >
               <X size={13} /> {t('common.delete', 'Mark Obsolete')} ({selected.size})
             </button>
           )}
+          <button
+            className="btn btn-secondary"
+            onClick={openBulkPrepModal}
+            id="btn-bulk-prep-status"
+            title={t('testCases.bulkUpdatePrepStatus', 'Bulk Update Preparation Status')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <Layers size={14} />
+            <span>{t('testCases.bulkUpdatePrepStatus', 'Bulk Update Preparation Status')}</span>
+          </button>
           <button className="btn btn-secondary" onClick={() => exportData('csv')} title="Export CSV (UTF-8)">
             <Download size={14} /> {t('common.export', 'Export')} CSV
           </button>
@@ -346,6 +664,58 @@ export default function TestCasesPage() {
         </div>
       </div>
 
+      {/* Bulk Selection and Test Run Action Bar - shown when cases are selected */}
+      {selected.size > 0 && (
+        <div
+          className="card"
+          style={{
+            padding: '10px 18px',
+            marginBottom: 16,
+            background: 'var(--surface-2)',
+            borderLeft: '4px solid var(--primary)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 12,
+          }}
+          id="bulk-selection-bar"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--foreground)' }}>
+              {selected.size} {t('testCases.selectedCount', 'test case(s) selected')}
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
+              ({pagination.total} {t('common.total', 'total in current filter')})
+            </span>
+            {selectingAll && <span className="spinner" style={{ width: 14, height: 14 }} />}
+          </div>
+
+          {/* Action: Run Selected Test Cases & Bulk Delete */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowBulkDeleteModal(true)}
+              id="btn-bulk-delete-action-bar"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--error)' }}
+              title="Delete Selected Test Cases"
+            >
+              <Trash2 size={14} style={{ color: 'var(--error)' }} />
+              <span>{t('common.delete', 'Delete')} ({selected.size})</span>
+            </button>
+            <button
+              className="btn btn-success"
+              onClick={openTestRunModal}
+              id="btn-run-selected"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}
+            >
+              <Play size={14} />
+              <span>{t('testCases.runSelected', 'Run Selected Test Cases')} ({selected.size})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       {loading ? <LoadingSpinner /> : testCases.length === 0 ? (
         <EmptyState
@@ -361,7 +731,20 @@ export default function TestCasesPage() {
               <thead>
                 <tr>
                   <th style={{ width: 40 }}>
-                    <input type="checkbox" checked={selected.size === testCases.length && testCases.length > 0} onChange={selectAll} />
+                    <input
+                      ref={headerCheckboxRef}
+                      type="checkbox"
+                      checked={isAllSelected}
+                      onChange={handleToggleHeaderSelect}
+                      id="checkbox-select-all"
+                      disabled={pagination.total === 0 || selectingAll}
+                      title={
+                        isAllSelected
+                          ? 'Deselect all filtered cases'
+                          : 'Select all filtered cases'
+                      }
+                      style={{ cursor: pagination.total > 0 ? 'pointer' : 'not-allowed' }}
+                    />
                   </th>
                   <th onClick={() => handleSort('case_id')} style={{ cursor: 'pointer' }}>
                     {t('testCases.caseId', 'ID')} {renderSortIcon('case_id', sortBy, sortDir)}
@@ -414,7 +797,7 @@ export default function TestCasesPage() {
                         <button className="btn btn-ghost btn-icon btn-sm" title="Edit" onClick={() => openEdit(tc)}>
                           <Edit2 size={13} />
                         </button>
-                        <button className="btn btn-ghost btn-icon btn-sm" title="Archive" onClick={() => setDeleteTarget(tc)}>
+                        <button className="btn btn-ghost btn-icon btn-sm" title={t('common.delete', 'Delete')} onClick={() => setDeleteTarget(tc)} id={`btn-delete-${tc.id}`}>
                           <Trash2 size={13} style={{ color: 'var(--error)' }} />
                         </button>
                       </div>
@@ -728,14 +1111,487 @@ export default function TestCasesPage() {
         )}
       </Modal>
 
-      {/* Archive Confirm */}
+      {/* Create Test Run Confirmation Modal */}
+      <Modal
+        isOpen={showTestRunModal}
+        onClose={() => setShowTestRunModal(false)}
+        title={t('testCases.createTestRunModalTitle', 'Create Test Run & Bulk Execution')}
+        size="lg"
+        footer={
+          <>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowTestRunModal(false)}
+              disabled={creatingRun}
+            >
+              {t('common.cancel', 'Cancel')}
+            </button>
+            <button
+              className="btn btn-primary"
+              id="btn-confirm-create-test-run"
+              onClick={handleCreateTestRun}
+              disabled={creatingRun || selected.size === 0 || !testRunForm.name.trim()}
+              style={{ background: 'var(--plum-primary, #6b21a8)', color: '#fff' }}
+            >
+              {creatingRun ? (
+                <span className="spinner" />
+              ) : (
+                <>
+                  <Play size={14} style={{ marginRight: 6 }} />
+                  {t('testCases.startExecution', 'Start Test Run')} ({selected.size})
+                </>
+              )}
+            </button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="info-box" style={{ background: 'var(--surface-2)', padding: '12px 16px', borderRadius: 8 }}>
+            <div style={{ fontSize: 13, color: 'var(--foreground)' }}>
+              {t('testCases.runModalHint', 'A new Test Run session will be created with the selected test cases ordered strictly by Module, Feature, and Test Case ID.')}
+            </div>
+          </div>
+
+          <div className="form-grid">
+            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <label className="form-label">
+                {t('testCases.testRunName', 'Test Run Name')} <span className="form-required">*</span>
+              </label>
+              <input
+                id="input-test-run-name"
+                className="form-control"
+                placeholder="e.g. Authentication Regression - Run 001"
+                value={testRunForm.name}
+                onChange={e => setTestRunForm(p => ({ ...p, name: e.target.value }))}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">{t('testCases.environment', 'Environment')}</label>
+              <select
+                id="select-test-run-env"
+                className="form-control"
+                value={testRunForm.environment}
+                onChange={e => setTestRunForm(p => ({ ...p, environment: e.target.value }))}
+              >
+                <option value="DEV">DEV (Development)</option>
+                <option value="STG">STG (Staging)</option>
+                <option value="UAT">UAT (User Acceptance)</option>
+                <option value="PROD">PROD (Production)</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">{t('testCases.totalSelected', 'Total Selected Cases')}</label>
+              <div
+                style={{
+                  height: 38,
+                  display: 'flex',
+                  alignItems: 'center',
+                  fontWeight: 600,
+                  fontSize: 14,
+                  color: 'var(--primary)',
+                }}
+              >
+                {selected.size} {t('testCases.casesSelected', 'cases')}
+              </div>
+            </div>
+
+            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <label className="form-label">{t('testCases.descriptionOptional', 'Description (Optional)')}</label>
+              <textarea
+                id="input-test-run-desc"
+                className="form-control"
+                rows={2}
+                placeholder="Add test scope, objectives, or release notes..."
+                value={testRunForm.description}
+                onChange={e => setTestRunForm(p => ({ ...p, description: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          {/* Selected Test Cases List preview */}
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 8,
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--foreground)' }}>
+                {t('testCases.includedCases', 'Included Test Cases')} ({selectedCasesData.length})
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--foreground-muted)' }}>
+                {t('testCases.orderedHint', 'Ordered by Module → Feature → Case ID')}
+              </div>
+            </div>
+
+            {loadingSelectedCases ? (
+              <div style={{ textAlign: 'center', padding: 24, color: 'var(--foreground-muted)' }}>
+                <span className="spinner" /> Loading selected cases...
+              </div>
+            ) : selectedCasesData.length === 0 ? (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: 24,
+                  background: 'var(--surface-2)',
+                  borderRadius: 6,
+                  color: 'var(--foreground-muted)',
+                  fontSize: 13,
+                }}
+              >
+                No test cases selected.
+              </div>
+            ) : (
+              <div
+                style={{
+                  maxHeight: 280,
+                  overflowY: 'auto',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
+                  background: 'var(--surface)',
+                }}
+              >
+                <table className="table" style={{ margin: 0, fontSize: 12 }}>
+                  <thead style={{ position: 'sticky', top: 0, background: 'var(--surface-2)', zIndex: 1 }}>
+                    <tr>
+                      <th style={{ width: 100 }}>Case ID</th>
+                      <th style={{ width: 140 }}>Module</th>
+                      <th style={{ width: 140 }}>Feature</th>
+                      <th>Title</th>
+                      <th style={{ width: 80, textAlign: 'center' }}>Result</th>
+                      <th style={{ width: 50, textAlign: 'center' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedCasesData.map(tc => (
+                      <tr key={tc.id}>
+                        <td>
+                          <span className="badge badge-neutral" style={{ fontWeight: 600 }}>
+                            {tc.case_id}
+                          </span>
+                        </td>
+                        <td style={{ color: 'var(--foreground-muted)' }}>{tc.module_name || '-'}</td>
+                        <td style={{ color: 'var(--foreground-muted)' }}>{tc.feature_name || '-'}</td>
+                        <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {tc.title}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span className={`badge badge-${tc.latest_result || 'not_run'}`}>
+                            {tc.latest_result ? tc.latest_result.toUpperCase() : 'NOT RUN'}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-icon"
+                            title="Remove from run"
+                            onClick={() => removeCaseFromRun(tc.id)}
+                            style={{ color: 'var(--error, #ef4444)', padding: 4 }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Simplified Bulk Update Preparation Status Modal */}
+      <Modal
+        isOpen={showBulkPrepModal}
+        onClose={() => setShowBulkPrepModal(false)}
+        title={t('testCases.bulkUpdatePrepStatus', 'Bulk Update Preparation Status')}
+        size="lg"
+        footer={
+          <>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowBulkPrepModal(false)}
+              disabled={executingBulkPrep}
+            >
+              {t('common.cancel', 'Cancel')}
+            </button>
+            <button
+              className="btn btn-primary"
+              id="btn-confirm-bulk-prep-submit"
+              onClick={handleConfirmBulkPrepUpdate}
+              disabled={
+                executingBulkPrep ||
+                loadingBulkPrepPreview ||
+                !bulkPrepPreview ||
+                bulkPrepPreview.cases_to_update === 0
+              }
+              style={{ background: 'var(--primary)', color: '#fff' }}
+            >
+              {executingBulkPrep ? (
+                <span className="spinner" />
+              ) : (
+                <>
+                  <Check size={14} style={{ marginRight: 6 }} />
+                  {t('testCases.confirmUpdatePrep', 'Confirm Update')}{bulkPrepPreview && bulkPrepPreview.cases_to_update > 0 ? ` (${bulkPrepPreview.cases_to_update})` : ''}
+                </>
+              )}
+            </button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* 1. Filter Summary */}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+              Filter Summary
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {filters.moduleId ? (
+                <span className="badge badge-neutral" style={{ padding: '4px 8px', fontSize: 12 }}>
+                  Module: {modules.find(m => String(m.id) === String(filters.moduleId))?.name || filters.moduleId}
+                </span>
+              ) : (
+                <span className="badge badge-neutral" style={{ padding: '4px 8px', fontSize: 12 }}>
+                  Module: All Modules
+                </span>
+              )}
+              {filters.featureId && (
+                <span className="badge badge-neutral" style={{ padding: '4px 8px', fontSize: 12 }}>
+                  Feature: {features.find(f => String(f.id) === String(filters.featureId))?.name || filters.featureId}
+                </span>
+              )}
+              {filters.priority && (
+                <span className="badge badge-neutral" style={{ padding: '4px 8px', fontSize: 12 }}>
+                  Priority: {PRIORITIES.find(p => p.value === filters.priority)?.label || filters.priority.toUpperCase()}
+                </span>
+              )}
+              {filters.prepStatus && (
+                <span className="badge badge-neutral" style={{ padding: '4px 8px', fontSize: 12 }}>
+                  Preparation Status: {PREP_STATUSES.find(s => s.value === filters.prepStatus)?.label || filters.prepStatus}
+                </span>
+              )}
+              {filters.latestResult && (
+                <span className="badge badge-neutral" style={{ padding: '4px 8px', fontSize: 12 }}>
+                  Execution Result: {EXEC_RESULTS.find(r => r.value === filters.latestResult)?.label || filters.latestResult}
+                </span>
+              )}
+              {filters.search && (
+                <span className="badge badge-neutral" style={{ padding: '4px 8px', fontSize: 12 }}>
+                  Search: &ldquo;{filters.search}&rdquo;
+                </span>
+              )}
+              <span className="badge badge-success" style={{ padding: '4px 8px', fontSize: 12, fontWeight: 600 }}>
+                Lifecycle: Active Only
+              </span>
+            </div>
+          </div>
+
+          {/* 2. Update Summary */}
+          <div style={{ background: 'var(--surface-2)', borderRadius: 8, padding: '12px 16px', border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+              Update Summary
+            </div>
+            {loadingBulkPrepPreview ? (
+              <div style={{ padding: '12px 0', textAlign: 'center', color: 'var(--foreground-muted)', fontSize: 13 }}>
+                <span className="spinner" style={{ marginRight: 8 }} /> Calculating preview...
+              </div>
+            ) : !bulkPrepPreview ? (
+              <div style={{ padding: '8px 0', color: 'var(--foreground-muted)', fontSize: 13 }}>
+                No preview data available
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                <div style={{ background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--foreground-muted)', fontWeight: 500 }}>Matching Cases</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginTop: 2 }}>
+                    {bulkPrepPreview.total_matching_active}
+                  </div>
+                </div>
+                <div style={{ background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--foreground-muted)', fontWeight: 500 }}>Current Status Distribution</div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap', fontSize: 11 }}>
+                    <span className="badge badge-neutral" style={{ padding: '2px 6px', fontSize: 11 }}>
+                      Draft: {bulkPrepPreview.distribution.draft}
+                    </span>
+                    <span className="badge badge-neutral" style={{ padding: '2px 6px', fontSize: 11 }}>
+                      In Progress: {bulkPrepPreview.distribution.in_progress}
+                    </span>
+                    <span className="badge badge-neutral" style={{ padding: '2px 6px', fontSize: 11 }}>
+                      Ready: {bulkPrepPreview.distribution.ready}
+                    </span>
+                  </div>
+                </div>
+                <div style={{
+                  background: bulkPrepPreview.cases_to_update > 0 ? 'rgba(16, 185, 129, 0.08)' : 'var(--surface)',
+                  padding: 10,
+                  borderRadius: 6,
+                  border: bulkPrepPreview.cases_to_update > 0 ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border)'
+                }}>
+                  <div style={{ fontSize: 11, color: bulkPrepPreview.cases_to_update > 0 ? 'var(--success, #10b981)' : 'var(--foreground-muted)', fontWeight: 600 }}>
+                    Cases to Update
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: bulkPrepPreview.cases_to_update > 0 ? 'var(--success, #10b981)' : 'var(--foreground-muted)', marginTop: 2 }}>
+                    {bulkPrepPreview.cases_to_update}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {bulkPrepPreview && bulkPrepPreview.total_matching_active === 0 && (
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--warning, #eab308)' }}>
+                ⚠️ No active test cases match the active filter criteria.
+              </div>
+            )}
+            {bulkPrepPreview && bulkPrepPreview.total_matching_active > 0 && bulkPrepPreview.cases_to_update === 0 && (
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--foreground-muted)' }}>
+                ℹ️ All {bulkPrepPreview.total_matching_active} matching test cases already have preparation status &quot;{bulkPrepNewStatus.replace('_', ' ').toUpperCase()}&quot;. No status will be changed.
+              </div>
+            )}
+          </div>
+
+          {/* 3. Change Preparation Status To */}
+          <div>
+            <label className="form-label" style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, display: 'block' }}>
+              Change Preparation Status To
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+              {[
+                { value: 'draft', label: 'Draft', icon: '📝' },
+                { value: 'in_progress', label: 'In Progress', icon: '⏳' },
+                { value: 'ready', label: 'Ready', icon: '✅' },
+              ].map(opt => {
+                const isSelected = bulkPrepNewStatus === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => handleChangeBulkPrepStatus(opt.value as any)}
+                    style={{
+                      padding: '12px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      background: isSelected ? 'var(--primary-subtle, rgba(99, 102, 241, 0.1))' : 'var(--surface)',
+                      border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      fontWeight: isSelected ? 600 : 500,
+                      color: isSelected ? 'var(--primary)' : 'var(--foreground)',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <span>{opt.icon}</span>
+                    <span style={{ fontSize: 13 }}>{opt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 4. View Affected Test Cases (Accordion - collapsed by default) */}
+          <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+            <button
+              type="button"
+              onClick={() => setShowAffectedCases(!showAffectedCases)}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                background: 'var(--surface-2)',
+                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                textAlign: 'left',
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--foreground)',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {showAffectedCases ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                View Affected Test Cases {bulkPrepPreview ? `(${bulkPrepPreview.affected_cases?.length || 0})` : ''}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--foreground-muted)', fontWeight: 400 }}>
+                {showAffectedCases ? 'Click to collapse' : 'Click to expand'}
+              </span>
+            </button>
+
+            {showAffectedCases && (
+              <div style={{ maxHeight: 220, overflowY: 'auto', background: 'var(--surface)' }}>
+                {loadingBulkPrepPreview ? (
+                  <div style={{ textAlign: 'center', padding: 20, color: 'var(--foreground-muted)', fontSize: 12 }}>
+                    <span className="spinner" style={{ marginRight: 6 }} /> Loading affected cases...
+                  </div>
+                ) : !bulkPrepPreview?.affected_cases?.length ? (
+                  <div style={{ padding: 16, textAlign: 'center', color: 'var(--foreground-muted)', fontSize: 12 }}>
+                    No test cases matching current criteria.
+                  </div>
+                ) : (
+                  <table className="table" style={{ margin: 0, fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--surface-2)', position: 'sticky', top: 0, zIndex: 1 }}>
+                        <th style={{ width: '25%', padding: '8px 12px' }}>Test Case ID</th>
+                        <th style={{ width: '35%', padding: '8px 12px' }}>Feature</th>
+                        <th style={{ width: '20%', padding: '8px 12px' }}>Current Status</th>
+                        <th style={{ width: '20%', padding: '8px 12px' }}>New Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bulkPrepPreview.affected_cases.map(tc => (
+                        <tr key={tc.id}>
+                          <td style={{ fontWeight: 600, padding: '8px 12px' }}>{tc.case_id}</td>
+                          <td style={{ color: 'var(--foreground-muted)', padding: '8px 12px' }}>{tc.feature_name}</td>
+                          <td style={{ padding: '8px 12px' }}>
+                            <PrepBadge status={tc.current_prep_status as any} />
+                          </td>
+                          <td style={{ padding: '8px 12px' }}>
+                            {tc.will_change ? (
+                              <PrepBadge status={bulkPrepNewStatus} />
+                            ) : (
+                              <span style={{ fontSize: 11, color: 'var(--foreground-muted)' }}>
+                                No change
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation Popup (Row-level) */}
       <ConfirmModal
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={archiveCase}
-        title="Archive Test Case"
-        message={`Test case "${deleteTarget?.title}" will be archived. Data is not deleted and can be restored.`}
-        confirmLabel="Archive"
+        title="Delete Test Case?"
+        message="Are you sure you want to delete this test case?"
+        confirmLabel="Delete"
+        danger
+        loading={saving}
+      />
+
+      {/* Bulk Delete Confirmation Popup */}
+      <ConfirmModal
+        isOpen={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        onConfirm={handleConfirmBulkDelete}
+        title="Delete Selected Test Cases?"
+        message={`Are you sure you want to delete the selected test cases? (${selected.size} test case${selected.size > 1 ? 's' : ''} selected)`}
+        confirmLabel="Delete Selected"
         danger
         loading={saving}
       />

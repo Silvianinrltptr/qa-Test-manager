@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProgressBar, ResultBadge, LoadingSpinner } from '@/components/ui/Shared';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -62,8 +62,7 @@ export default function DashboardPage() {
 • Kedaluwarsa: ${metrics.weeklyChange.obsolete}
 ${metrics.byModule && metrics.byModule.length > 0 ? `
 📦 *Kemajuan per Modul:*
-${metrics.byModule.filter(m => Number(m.total) > 0).map(m => `• ${m.module} (${m.prefix}): ${m.total} kasus (${m.ready} siap, ${m.executed} dieksekusi)`).join('\n')}` : ''}
-
+${metrics.byModule.filter(m => Number(m.total) > 0).map(m => `• ${m.module} (${m.prefix}): ${m.total} kasus (${m.ready} siap, ${m.executed} dieksekusi, ${m.not_run ?? Math.max(0, m.ready - m.executed)} belum dijalankan)`).join('\n')}` : ''}
 ${results.fail > 0 ? `⚠️ Terdapat ${results.fail} test case yang GAGAL dan memerlukan tindak lanjut.` : '✅ Tidak ada kegagalan yang dilaporkan.'}
 ${results.blocked > 0 ? `🚧 ${results.blocked} test case TERBLOKIR.` : ''}`
       : `📊 *QA Update - ${today}*
@@ -87,7 +86,7 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case TERBLOKIR.` : ''}`
 • Obsolete: ${metrics.weeklyChange.obsolete}
 ${metrics.byModule && metrics.byModule.length > 0 ? `
 📦 *Progress by Module:*
-${metrics.byModule.filter(m => Number(m.total) > 0).map(m => `• ${m.module} (${m.prefix}): ${m.total} cases (${m.ready} ready, ${m.executed} executed)`).join('\n')}` : ''}
+${metrics.byModule.filter(m => Number(m.total) > 0).map(m => `• ${m.module} (${m.prefix}): ${m.total} cases (${m.ready} ready, ${m.executed} executed, ${m.not_run ?? Math.max(0, m.ready - m.executed)} not run)`).join('\n')}` : ''}
 
 ${results.fail > 0 ? `⚠️ There are ${results.fail} test case(s) that FAILED and require follow-up.` : '✅ No failures reported.'}
 ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
@@ -113,6 +112,22 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
   }
 
   const { totalActive, byModule, prepProgress, execProgress, passRate, results, notReady, weeklyChange, recentActivity } = metrics;
+
+  const totals = useMemo(() => {
+    return (byModule || []).reduce(
+      (acc, m) => ({
+        total: acc.total + (m.total || 0),
+        ready: acc.ready + (m.ready || 0),
+        executed: acc.executed + (m.executed || 0),
+        pass: acc.pass + (m.pass || 0),
+        fail: acc.fail + (m.fail || 0),
+        blocked: acc.blocked + (m.blocked || 0),
+        not_run: acc.not_run + (m.not_run ?? Math.max(0, (m.ready || 0) - (m.executed || 0))),
+        unclassified: acc.unclassified + (m.unclassified || 0),
+      }),
+      { total: 0, ready: 0, executed: 0, pass: 0, fail: 0, blocked: 0, not_run: 0, unclassified: 0 }
+    );
+  }, [byModule]);
 
   return (
     <AppShell>
@@ -339,37 +354,79 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
             <table>
               <thead>
                 <tr>
-                  <th>{t('common.module', 'Module')}</th>
-                  <th>{t('common.total', 'Total')}</th>
-                  <th>{t('common.statusReady', 'Ready')}</th>
-                  <th>{t('dashboard.testExecProgress', 'Executed')}</th>
-                  <th>{t('common.resultPass', 'Pass')}</th>
-                  <th>{t('common.resultFail', 'Fail')}</th>
-                  <th>{t('common.resultBlocked', 'Blocked')}</th>
-                  <th>{t('dashboard.testPrepProgress', 'Preparation')}</th>
+                  <th style={{ textAlign: 'left' }}>{t('common.module', 'Module')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('common.totalTC', 'Total TC')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('common.statusReady', 'Ready')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('dashboard.testExecProgress', 'Executed')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('common.resultPass', 'Pass')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('common.resultFail', 'Fail')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('common.resultBlocked', 'Blocked')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('common.resultNotRun', 'Not Run')}</th>
                 </tr>
               </thead>
               <tbody>
-                {byModule.map(mod => (
-                  <tr key={mod.module}>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{mod.module}</div>
-                      <div style={{ fontSize: 11, color: 'var(--foreground-muted)' }}>{mod.prefix}</div>
-                    </td>
-                    <td>{mod.total}</td>
-                    <td style={{ color: 'var(--success)' }}>{mod.ready}</td>
-                    <td>{mod.executed}</td>
-                    <td style={{ color: 'var(--success)' }}>{mod.pass}</td>
-                    <td style={{ color: mod.fail > 0 ? 'var(--error)' : 'inherit' }}>{mod.fail}</td>
-                    <td style={{ color: mod.blocked > 0 ? 'var(--warning)' : 'inherit' }}>{mod.blocked}</td>
-                    <td style={{ minWidth: 120 }}>
-                      <ProgressBar value={mod.ready} max={mod.total} />
-                    </td>
-                  </tr>
-                ))}
+                {byModule.map(mod => {
+                  const modNotRun = mod.not_run ?? Math.max(0, mod.ready - mod.executed);
+                  const hasUnclassified = (mod.unclassified || 0) > 0;
+                  return (
+                    <tr key={mod.module}>
+                      <td style={{ textAlign: 'left' }}>
+                        <div style={{ fontWeight: 600 }}>{mod.module}</div>
+                        <div style={{ fontSize: 11, color: 'var(--foreground-muted)' }}>{mod.prefix}</div>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>{mod.total}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--success)' }}>{mod.ready}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {mod.executed}
+                        {hasUnclassified && (
+                          <span
+                            title={`${mod.unclassified} test case(s) with execution attempt unclassified (needs review)`}
+                            style={{ marginLeft: 4, cursor: 'help' }}
+                          >
+                            ⚠️
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right', color: 'var(--success)' }}>{mod.pass}</td>
+                      <td style={{ textAlign: 'right', color: mod.fail > 0 ? 'var(--error)' : 'inherit' }}>{mod.fail}</td>
+                      <td style={{ textAlign: 'right', color: mod.blocked > 0 ? 'var(--warning)' : 'inherit' }}>{mod.blocked}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--foreground-muted)' }}>{modNotRun}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
+              <tfoot>
+                <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)', background: 'var(--surface-2)' }}>
+                  <td style={{ textAlign: 'left' }}>{t('common.total', 'Total')}</td>
+                  <td style={{ textAlign: 'right' }}>{totals.total}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--success)' }}>{totals.ready}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {totals.executed}
+                    {totals.unclassified > 0 && (
+                      <span
+                        title={`${totals.unclassified} test case(s) with execution attempt unclassified (needs review)`}
+                        style={{ marginLeft: 4, cursor: 'help' }}
+                      >
+                        ⚠️
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ textAlign: 'right', color: 'var(--success)' }}>{totals.pass}</td>
+                  <td style={{ textAlign: 'right', color: totals.fail > 0 ? 'var(--error)' : 'inherit' }}>{totals.fail}</td>
+                  <td style={{ textAlign: 'right', color: totals.blocked > 0 ? 'var(--warning)' : 'inherit' }}>{totals.blocked}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--foreground-muted)' }}>{totals.not_run}</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
+          {totals.unclassified > 0 && (
+            <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--warning-light, rgba(234, 179, 8, 0.1))', border: '1px solid var(--warning)', borderRadius: 6, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--foreground)' }}>
+              <span>⚠️</span>
+              <span>
+                {t('dashboard.unclassifiedNotice', 'Note: There is {count} test case with an execution attempt whose result is unclassified (needs review).').replace('{count}', String(totals.unclassified))}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

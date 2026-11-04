@@ -16,20 +16,43 @@ export async function GET(req: NextRequest) {
     const totalActive = totalActiveRow ? Number(totalActiveRow.count) : 0;
 
     // By module
-    const byModule = await db.prepare(`
+    const byModuleRaw = await db.prepare(`
       SELECT m.name as module, m.prefix, 
         COUNT(tc.id) as total,
         COUNT(CASE WHEN tc.prep_status = 'ready' THEN 1 END) as ready,
-        COUNT(CASE WHEN tc.exec_status = 'executed' THEN 1 END) as executed,
-        COUNT(CASE WHEN tc.latest_result = 'pass' THEN 1 END) as pass,
-        COUNT(CASE WHEN tc.latest_result = 'fail' THEN 1 END) as fail,
-        COUNT(CASE WHEN tc.latest_result = 'blocked' THEN 1 END) as blocked
+        COUNT(CASE WHEN tc.prep_status = 'ready' AND (tc.exec_status = 'executed' OR tc.latest_result IN ('pass', 'fail', 'blocked')) THEN 1 END) as executed,
+        COUNT(CASE WHEN tc.prep_status = 'ready' AND tc.latest_result = 'pass' THEN 1 END) as pass,
+        COUNT(CASE WHEN tc.prep_status = 'ready' AND tc.latest_result = 'fail' THEN 1 END) as fail,
+        COUNT(CASE WHEN tc.prep_status = 'ready' AND tc.latest_result = 'blocked' THEN 1 END) as blocked
       FROM modules m
       LEFT JOIN test_cases tc ON tc.module_id = m.id AND tc.lifecycle_status = 'active'
       WHERE m.status = 'active' OR m.id IN (SELECT DISTINCT module_id FROM test_cases WHERE lifecycle_status = 'active')
       GROUP BY m.id
       ORDER BY m.name
     `).all();
+
+    const byModule = (byModuleRaw || []).map((mod: any) => {
+      const total = Number(mod.total) || 0;
+      const ready = Number(mod.ready) || 0;
+      const executed = Number(mod.executed) || 0;
+      const pass = Number(mod.pass) || 0;
+      const fail = Number(mod.fail) || 0;
+      const blocked = Number(mod.blocked) || 0;
+      const not_run = Math.max(0, ready - executed);
+      const unclassified = Math.max(0, executed - (pass + fail + blocked));
+      return {
+        module: mod.module,
+        prefix: mod.prefix,
+        total,
+        ready,
+        executed,
+        pass,
+        fail,
+        blocked,
+        not_run,
+        unclassified,
+      };
+    });
 
     // Prep progress
     const prepRow = ((await db.prepare(`
@@ -42,20 +65,30 @@ export async function GET(req: NextRequest) {
     // Exec progress (of ready cases)
     const execRow = ((await db.prepare(`
       SELECT 
-        COUNT(CASE WHEN exec_status = 'executed' THEN 1 END) as executed,
-        COUNT(*) as ready_total
-      FROM test_cases WHERE lifecycle_status = 'active' AND prep_status = 'ready'
+        COUNT(CASE WHEN tc.prep_status = 'ready' AND (tc.exec_status = 'executed' OR tc.latest_result IN ('pass', 'fail', 'blocked')) THEN 1 END) as executed,
+        COUNT(CASE WHEN tc.prep_status = 'ready' THEN 1 END) as ready_total
+      FROM test_cases tc WHERE tc.lifecycle_status = 'active'
     `).get()) as { executed: number; ready_total: number } | undefined) || { executed: 0, ready_total: 0 };
 
-    // Results
-    const results = ((await db.prepare(`
+    // Results (Pass, Fail, Blocked on active cases)
+    const resultsRow = ((await db.prepare(`
       SELECT
-        COUNT(CASE WHEN latest_result = 'pass' THEN 1 END) as pass,
-        COUNT(CASE WHEN latest_result = 'fail' THEN 1 END) as fail,
-        COUNT(CASE WHEN latest_result = 'blocked' THEN 1 END) as blocked,
-        COUNT(CASE WHEN latest_result = 'not_run' THEN 1 END) as not_run
-      FROM test_cases WHERE lifecycle_status = 'active'
-    `).get()) as { pass: number; fail: number; blocked: number; not_run: number } | undefined) || { pass: 0, fail: 0, blocked: 0, not_run: 0 };
+        COUNT(CASE WHEN tc.prep_status = 'ready' AND tc.latest_result = 'pass' THEN 1 END) as pass,
+        COUNT(CASE WHEN tc.prep_status = 'ready' AND tc.latest_result = 'fail' THEN 1 END) as fail,
+        COUNT(CASE WHEN tc.prep_status = 'ready' AND tc.latest_result = 'blocked' THEN 1 END) as blocked
+      FROM test_cases tc WHERE tc.lifecycle_status = 'active'
+    `).get()) as { pass: number; fail: number; blocked: number } | undefined) || { pass: 0, fail: 0, blocked: 0 };
+
+    const totalReady = Number(prepRow.ready) || 0;
+    const totalExecuted = Number(execRow.executed) || 0;
+    const totalNotRun = Math.max(0, totalReady - totalExecuted);
+    const passCount = Number(resultsRow.pass) || 0;
+    const failCount = Number(resultsRow.fail) || 0;
+    const blockedCount = Number(resultsRow.blocked) || 0;
+    const totalUnclassified = Math.max(0, totalExecuted - (passCount + failCount + blockedCount));
+
+    // Pass rate: Pass / (Pass + Fail) * 100%. Blocked and Not Run excluded from denominator.
+    const passTotal = passCount + failCount;
 
     // Not ready
     const notReadyRow = (await db.prepare(`
@@ -82,32 +115,30 @@ export async function GET(req: NextRequest) {
 
     const weeklyChange = weeklyChangeRow || { added: 0, updated: 0, obsolete: 0, reactivated: 0 };
 
-    // Pass rate
-    const passTotal = (Number(results.pass) || 0) + (Number(results.fail) || 0);
-
     return NextResponse.json({
       totalActive,
-      byModule: byModule || [],
+      byModule,
       prepProgress: {
-        ready: Number(prepRow.ready) || 0,
+        ready: totalReady,
         total: Number(prepRow.total) || 0,
-        pct: Number(prepRow.total) > 0 ? Math.round(((Number(prepRow.ready) || 0) / Number(prepRow.total)) * 100) : null,
+        pct: Number(prepRow.total) > 0 ? Math.round((totalReady / Number(prepRow.total)) * 100) : null,
       },
       execProgress: {
-        executed: Number(execRow.executed) || 0,
-        readyTotal: Number(execRow.ready_total) || 0,
-        pct: Number(execRow.ready_total) > 0 ? Math.round(((Number(execRow.executed) || 0) / Number(execRow.ready_total)) * 100) : null,
+        executed: totalExecuted,
+        readyTotal: totalReady,
+        pct: totalReady > 0 ? Math.round((totalExecuted / totalReady) * 100) : null,
       },
       results: {
-        pass: Number(results.pass) || 0,
-        fail: Number(results.fail) || 0,
-        blocked: Number(results.blocked) || 0,
-        not_run: Number(results.not_run) || 0,
+        pass: passCount,
+        fail: failCount,
+        blocked: blockedCount,
+        not_run: totalNotRun,
+        unclassified: totalUnclassified,
       },
       passRate: {
-        pass: Number(results.pass) || 0,
+        pass: passCount,
         total: passTotal,
-        pct: passTotal > 0 ? Math.round(((Number(results.pass) || 0) / passTotal) * 100) : null,
+        pct: passTotal > 0 ? Math.round((passCount / passTotal) * 100) : null,
       },
       notReady,
       recentActivity: recentActivity || [],

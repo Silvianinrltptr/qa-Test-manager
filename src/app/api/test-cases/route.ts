@@ -23,10 +23,12 @@ export async function GET(req: NextRequest) {
     const testType = searchParams.get('testType');
     const search = searchParams.get('search');
     const page = Number(searchParams.get('page') ?? '1');
-    const limit = Number(searchParams.get('limit') ?? '20');
+    const limitParam = searchParams.get('limit');
+    const selectIdsOnly = searchParams.get('selectIdsOnly') === 'true';
+    const limit = limitParam === 'all' || limitParam === '-1' ? 10000 : Number(limitParam ?? '20');
     const sortBy = searchParams.get('sortBy') ?? 'created_at';
     const sortDir = searchParams.get('sortDir') ?? 'DESC';
-    const offset = (page - 1) * limit;
+    const offset = limitParam === 'all' || limitParam === '-1' ? 0 : (page - 1) * limit;
 
     const lang = searchParams.get('lang') || req.cookies.get('qastudio_lang')?.value || 'en';
 
@@ -63,6 +65,22 @@ export async function GET(req: NextRequest) {
     `).get(...params)) as { count: number } | undefined;
 
     const totalCount = countResult ? Number(countResult.count) : 0;
+
+    if (selectIdsOnly) {
+      const idRows = (await db.prepare(`
+        SELECT tc.id, tc.latest_result
+        FROM test_cases tc
+        LEFT JOIN test_case_translations tct_id ON tct_id.test_case_id = tc.id AND tct_id.language = 'id'
+        LEFT JOIN test_case_translations tct_en ON tct_en.test_case_id = tc.id AND tct_en.language = 'en'
+        ${where}
+        ORDER BY tc.id ASC
+      `).all(...params)) as { id: number; latest_result: string }[];
+
+      return NextResponse.json({
+        total: totalCount,
+        data: idRows || [],
+      });
+    }
 
     const testCases = (await db.prepare(`
       SELECT tc.*, m.name as module_name, m.prefix as module_prefix, f.name as feature_name,
