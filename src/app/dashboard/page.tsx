@@ -35,6 +35,22 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchMetrics(); }, []);
 
+  const totals = useMemo(() => {
+    return (metrics?.byModule || []).reduce(
+      (acc, m) => ({
+        total: acc.total + (m.total || 0),
+        ready: acc.ready + (m.ready || 0),
+        executed: acc.executed + (m.executed || 0),
+        pass: acc.pass + (m.pass || 0),
+        fail: acc.fail + (m.fail || 0),
+        blocked: acc.blocked + (m.blocked || 0),
+        not_run: acc.not_run + (m.not_run ?? Math.max(0, (m.ready || 0) - (m.executed || 0))),
+        unclassified: acc.unclassified + (m.unclassified || 0),
+      }),
+      { total: 0, ready: 0, executed: 0, pass: 0, fail: 0, blocked: 0, not_run: 0, unclassified: 0 }
+    );
+  }, [metrics?.byModule]);
+
   const generateSummary = () => {
     if (!metrics) return '';
     const { prepProgress, execProgress, passRate, results } = metrics;
@@ -113,21 +129,6 @@ ${results.blocked > 0 ? `🚧 ${results.blocked} test case(s) BLOCKED.` : ''}`;
 
   const { totalActive, byModule, prepProgress, execProgress, passRate, results, notReady, weeklyChange, recentActivity } = metrics;
 
-  const totals = useMemo(() => {
-    return (byModule || []).reduce(
-      (acc, m) => ({
-        total: acc.total + (m.total || 0),
-        ready: acc.ready + (m.ready || 0),
-        executed: acc.executed + (m.executed || 0),
-        pass: acc.pass + (m.pass || 0),
-        fail: acc.fail + (m.fail || 0),
-        blocked: acc.blocked + (m.blocked || 0),
-        not_run: acc.not_run + (m.not_run ?? Math.max(0, (m.ready || 0) - (m.executed || 0))),
-        unclassified: acc.unclassified + (m.unclassified || 0),
-      }),
-      { total: 0, ready: 0, executed: 0, pass: 0, fail: 0, blocked: 0, not_run: 0, unclassified: 0 }
-    );
-  }, [byModule]);
 
   return (
     <AppShell>
