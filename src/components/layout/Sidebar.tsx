@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n/context';
 import {
   LayoutDashboard, Layers, Sparkles, Upload,
   Play, BarChart3, History, Settings, ClipboardList, FlaskConical,
-  FileCheck2, AlertTriangle, Network, FileText, Inbox, Eye, LogOut
+  FileCheck2, AlertTriangle, Network, FileText, Inbox, Eye, LogOut, X
 } from 'lucide-react';
 
 interface NavItem {
@@ -20,6 +20,12 @@ interface NavItem {
 interface NavSection {
   label: string;
   items: NavItem[];
+}
+
+interface SidebarProps {
+  onNavigate?: () => void;
+  isMobile?: boolean;
+  onClose?: () => void;
 }
 
 const getNavSections = (t: (key: string, fallback?: string) => string): NavSection[] => [
@@ -87,7 +93,7 @@ function QAMonogramIcon({ size = 20, className = '' }: { size?: number; classNam
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ onNavigate, isMobile, onClose }: SidebarProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const { t } = useI18n();
@@ -118,13 +124,26 @@ export function Sidebar() {
   }, [pathname]);
 
   return (
-    <aside className="sidebar" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="sidebar-logo">
-        <h1 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <QAMonogramIcon size={20} />
-          <span>QAE Studio</span>
-        </h1>
-        <p>{t('common.appSubtitle', 'Test Management Workspace')}</p>
+    <aside className="sidebar" style={{ display: 'flex', flexDirection: 'column', height: '100%', width: isMobile ? '100%' : undefined }}>
+      <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <QAMonogramIcon size={20} />
+            <span>QAE Studio</span>
+          </h1>
+          <p>{t('common.appSubtitle', 'Test Management Workspace')}</p>
+        </div>
+        {isMobile && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn btn-ghost btn-icon"
+            aria-label="Close navigation"
+            style={{ padding: 6 }}
+          >
+            <X size={18} />
+          </button>
+        )}
       </div>
 
       <nav className="sidebar-nav" style={{ flex: 1, overflowY: 'auto' }}>
@@ -138,6 +157,7 @@ export function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={() => onNavigate?.()}
                   className={`nav-item ${active ? 'active' : ''}`}
                   id={`nav-${item.href.replace('/', '').replace('/', '-') || 'home'}`}
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
@@ -170,6 +190,7 @@ export function Sidebar() {
       <div style={{ padding: '14px 12px', borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
         <Link
           href="/project-viewer"
+          onClick={() => onNavigate?.()}
           className="btn btn-secondary btn-sm"
           style={{
             width: '100%',
@@ -189,6 +210,7 @@ export function Sidebar() {
         <button
           type="button"
           onClick={async () => {
+            onNavigate?.();
             try {
               await fetch('/api/auth/logout', { method: 'POST' });
             } catch {

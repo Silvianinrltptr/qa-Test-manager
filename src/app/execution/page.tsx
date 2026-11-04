@@ -386,7 +386,7 @@ function ExecutionContent() {
         </div>
 
         {/* Workspace Layout: Left Sidebar Case Order / Right Execution Panel */}
-        <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 20, alignItems: 'start' }}>
+        <div className="execution-workspace-grid">
           {/* Left Column: Ordered Cases in Test Run */}
           <div className="card" style={{ padding: '16px', maxHeight: 'calc(100vh - 280px)', overflowY: 'auto' }}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -534,7 +534,7 @@ function ExecutionContent() {
                   <label className="form-label" style={{ fontWeight: 600 }}>
                     {t('execution.result', 'Execution Result')} <span style={{ color: 'var(--error)' }}>*</span>
                   </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                  <div className="execution-result-buttons">
                     {[
                       { value: 'pass', label: '✅ Pass', bg: 'var(--success)', cls: 'badge-pass' },
                       { value: 'fail', label: '❌ Fail', bg: 'var(--error)', cls: 'badge-fail' },
@@ -637,7 +637,7 @@ function ExecutionContent() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, flexWrap: 'wrap', gap: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <input
                       type="checkbox"
@@ -653,7 +653,7 @@ function ExecutionContent() {
                     </label>
                   </div>
 
-                  <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <button
                       className="btn btn-secondary"
                       onClick={() => saveRunItemExecution(false)}
@@ -740,7 +740,7 @@ function ExecutionContent() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 20, alignItems: 'start' }}>
+      <div className="execution-single-grid">
         {/* Test case list */}
         <div>
           {loading ? <LoadingSpinner /> : testCases.length === 0 ? (

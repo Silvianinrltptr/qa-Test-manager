@@ -181,7 +181,7 @@ export default function AIGeneratorPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: 20, alignItems: 'start' }}>
+      <div className="ai-generator-grid">
         {/* Input Panel */}
         <div className="card">
           <div style={{ fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>

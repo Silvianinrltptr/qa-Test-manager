@@ -98,7 +98,7 @@ export default function TestCasesPage() {
 
   const [filters, setFilters] = useState({
     search: '', moduleId: '', featureId: '', priority: '', prepStatus: '',
-    latestResult: '', testType: '', lifecycle: 'active',
+    latestResult: '', testType: '', lifecycle: '',
   });
 
   const [form, setForm] = useState({
@@ -116,7 +116,7 @@ export default function TestCasesPage() {
     try {
       const params = new URLSearchParams({
         page: String(page), limit: String(pagination.limit),
-        sortBy, sortDir, lifecycle: filters.lifecycle,
+        sortBy, sortDir, lifecycle: filters.lifecycle || 'active',
         lang: locale,
         ...(filters.search && { search: filters.search }),
         ...(filters.moduleId && { moduleId: filters.moduleId }),
@@ -579,7 +579,7 @@ export default function TestCasesPage() {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
           <h1 className="page-title" style={{ margin: 0, fontWeight: 700 }}>{t('testCases.title', 'Test Cases')}</h1>
           <p className="page-subtitle" style={{ margin: '6px 0 14px 0', fontSize: 13, color: 'var(--foreground-muted)' }}>
-            {pagination.total} {t('common.testCases', 'Test Cases')} {filters.lifecycle !== 'all' ? `(${filters.lifecycle})` : ''}
+            {pagination.total} {t('common.testCases', 'Test Cases')}{filters.lifecycle && filters.lifecycle !== 'all' ? ` (${filters.lifecycle})` : ''}
           </p>
           <button className="btn btn-primary" onClick={openCreate} id="btn-create-testcase" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Plus size={14} /> {t('testCases.createTestCase', 'New Test Case')}
@@ -629,37 +629,74 @@ export default function TestCasesPage() {
               id="search-testcases"
             />
           </div>
-          <select className="form-control" style={{ width: 160 }} value={filters.moduleId}
-            onChange={e => setFilters(p => ({ ...p, moduleId: e.target.value, featureId: '' }))}>
-            <option value="">{t('common.all', 'All Modules')}</option>
+          <select
+            className="form-control filter-select"
+            value={filters.moduleId}
+            onChange={e => setFilters(p => ({ ...p, moduleId: e.target.value, featureId: '' }))}
+            id="filter-module"
+            style={{ color: filters.moduleId ? 'var(--foreground)' : 'var(--foreground-muted)' }}
+          >
+            <option value="" disabled hidden>{t('common.module', 'Module')}</option>
+            <option value="">{t('common.all', 'All')}</option>
             {modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
-          <select className="form-control" style={{ width: 160 }} value={filters.featureId}
-            onChange={e => setFilters(p => ({ ...p, featureId: e.target.value }))}>
-            <option value="">{t('common.all', 'All Features')}</option>
+          <select
+            className="form-control filter-select"
+            value={filters.featureId}
+            onChange={e => setFilters(p => ({ ...p, featureId: e.target.value }))}
+            id="filter-feature"
+            style={{ color: filters.featureId ? 'var(--foreground)' : 'var(--foreground-muted)' }}
+          >
+            <option value="" disabled hidden>{t('common.feature', 'Feature')}</option>
+            <option value="">{t('common.all', 'All')}</option>
             {filteredFeatures.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
-          <select className="form-control" style={{ width: 140 }} value={filters.priority}
-            onChange={e => setFilters(p => ({ ...p, priority: e.target.value }))}>
-            <option value="">{t('common.all', 'All Priorities')}</option>
+          <select
+            className="form-control filter-select"
+            value={filters.priority}
+            onChange={e => setFilters(p => ({ ...p, priority: e.target.value }))}
+            id="filter-priority"
+            style={{ color: filters.priority ? 'var(--foreground)' : 'var(--foreground-muted)' }}
+          >
+            <option value="" disabled hidden>{t('common.priority', 'Priority')}</option>
+            <option value="">{t('common.all', 'All')}</option>
             {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
-          <select className="form-control" style={{ width: 140 }} value={filters.prepStatus}
-            onChange={e => setFilters(p => ({ ...p, prepStatus: e.target.value }))}>
-            <option value="">{t('testCases.prepStatus', 'Prep Status')}</option>
+          <select
+            className="form-control filter-select"
+            value={filters.prepStatus}
+            onChange={e => setFilters(p => ({ ...p, prepStatus: e.target.value }))}
+            id="filter-prep-status"
+            style={{ color: filters.prepStatus ? 'var(--foreground)' : 'var(--foreground-muted)' }}
+          >
+            <option value="" disabled hidden>{t('testCases.prepStatus', 'Prep Status')}</option>
+            <option value="">{t('common.all', 'All')}</option>
             {PREP_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
-          <select className="form-control" style={{ width: 130 }} value={filters.latestResult}
-            onChange={e => setFilters(p => ({ ...p, latestResult: e.target.value }))}>
-            {EXEC_RESULTS.map(r => <option key={r.value} value={r.value}>{r.value ? r.label : t('common.all', 'All Results')}</option>)}
+          <select
+            className="form-control filter-select"
+            value={filters.latestResult}
+            onChange={e => setFilters(p => ({ ...p, latestResult: e.target.value }))}
+            id="filter-execution-result"
+            style={{ color: filters.latestResult ? 'var(--foreground)' : 'var(--foreground-muted)' }}
+          >
+            <option value="" disabled hidden>{t('execution.result', 'Execution Result')}</option>
+            <option value="">{t('common.all', 'All')}</option>
+            {EXEC_RESULTS.filter(r => r.value).map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
-          <select className="form-control" style={{ width: 120 }} value={filters.lifecycle}
-            onChange={e => setFilters(p => ({ ...p, lifecycle: e.target.value }))}>
+          <select
+            className="form-control filter-select"
+            value={filters.lifecycle}
+            onChange={e => setFilters(p => ({ ...p, lifecycle: e.target.value }))}
+            id="filter-lifecycle-status"
+            style={{ color: filters.lifecycle ? 'var(--foreground)' : 'var(--foreground-muted)' }}
+          >
+            <option value="" disabled hidden>{t('testCases.lifecycleStatus', 'Lifecycle Status')}</option>
+            <option value="all">{t('common.all', 'All')}</option>
             <option value="active">{t('common.active', 'Active')}</option>
             <option value="draft">{t('common.draft', 'Draft')}</option>
             <option value="obsolete">{t('common.obsolete', 'Obsolete')}</option>
             <option value="archived">{t('common.archived', 'Archived')}</option>
-            <option value="all">{t('common.all', 'All')}</option>
           </select>
         </div>
       </div>
@@ -809,7 +846,7 @@ export default function TestCasesPage() {
           </div>
 
           {/* Pagination */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <span style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>
               Showing {(pagination.page - 1) * pagination.limit + 1}–{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
             </span>
@@ -1406,7 +1443,7 @@ export default function TestCasesPage() {
                 No preview data available
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              <div className="preview-grid-3">
                 <div style={{ background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--border)' }}>
                   <div style={{ fontSize: 11, color: 'var(--foreground-muted)', fontWeight: 500 }}>Matching Cases</div>
                   <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--foreground)', marginTop: 2 }}>
@@ -1460,7 +1497,7 @@ export default function TestCasesPage() {
             <label className="form-label" style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, display: 'block' }}>
               Change Preparation Status To
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+            <div className="status-selector-grid">
               {[
                 { value: 'draft', label: 'Draft', icon: '📝' },
                 { value: 'in_progress', label: 'In Progress', icon: '⏳' },

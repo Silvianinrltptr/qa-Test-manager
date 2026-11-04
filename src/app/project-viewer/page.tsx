@@ -404,8 +404,8 @@ export default function ProjectViewerPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Filter size={14} style={{ color: 'var(--foreground-muted)' }} />
                   <select
-                    className="form-control"
-                    style={{ width: 160, height: 36, fontSize: 13 }}
+                    className="form-control filter-select"
+                    style={{ height: 36, fontSize: 13, color: selectedModule ? 'var(--foreground)' : 'var(--foreground-muted)' }}
                     value={selectedModule}
                     onChange={e => {
                       setSelectedModule(e.target.value);
@@ -413,7 +413,8 @@ export default function ProjectViewerPage() {
                     }}
                     id="filter-module-select"
                   >
-                    <option value="">{t('projectViewer.allModules', 'All Modules')}</option>
+                    <option value="" disabled hidden>{t('common.module', 'Module')}</option>
+                    <option value="">{t('common.all', 'All')}</option>
                     {modules.map(m => (
                       <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
@@ -421,40 +422,43 @@ export default function ProjectViewerPage() {
                 </div>
 
                 <select
-                  className="form-control"
-                  style={{ width: 170, height: 36, fontSize: 13 }}
+                  className="form-control filter-select"
+                  style={{ height: 36, fontSize: 13, color: selectedFeature ? 'var(--foreground)' : 'var(--foreground-muted)' }}
                   value={selectedFeature}
                   onChange={e => setSelectedFeature(e.target.value)}
                   id="filter-feature-select"
                   disabled={availableFeatures.length === 0}
                 >
-                  <option value="">{t('projectViewer.allFeatures', 'All Features')}</option>
+                  <option value="" disabled hidden>{t('common.feature', 'Feature')}</option>
+                  <option value="">{t('common.all', 'All')}</option>
                   {availableFeatures.map(f => (
                     <option key={f.id} value={f.id}>{f.name}</option>
                   ))}
                 </select>
 
                 <select
-                  className="form-control"
-                  style={{ width: 145, height: 36, fontSize: 13 }}
+                  className="form-control filter-select"
+                  style={{ height: 36, fontSize: 13, color: selectedPrepStatus ? 'var(--foreground)' : 'var(--foreground-muted)' }}
                   value={selectedPrepStatus}
                   onChange={e => setSelectedPrepStatus(e.target.value)}
                   id="filter-prep-select"
                 >
-                  <option value="">{t('projectViewer.allPreparation', 'All Preparation')}</option>
+                  <option value="" disabled hidden>{t('testCases.prepStatus', 'Prep Status')}</option>
+                  <option value="">{t('common.all', 'All')}</option>
                   <option value="ready">{t('projectViewer.prepReady', 'Ready')}</option>
                   <option value="in_progress">{t('projectViewer.prepInProgress', 'In Progress')}</option>
                   <option value="draft">{t('projectViewer.prepDraft', 'Draft')}</option>
                 </select>
 
                 <select
-                  className="form-control"
-                  style={{ width: 135, height: 36, fontSize: 13 }}
+                  className="form-control filter-select"
+                  style={{ height: 36, fontSize: 13, color: selectedResult ? 'var(--foreground)' : 'var(--foreground-muted)' }}
                   value={selectedResult}
                   onChange={e => setSelectedResult(e.target.value)}
                   id="filter-result-select"
                 >
-                  <option value="">{t('projectViewer.allResults', 'All Results')}</option>
+                  <option value="" disabled hidden>{t('execution.result', 'Execution Result')}</option>
+                  <option value="">{t('common.all', 'All')}</option>
                   <option value="pass">{t('projectViewer.resultPass', 'Pass')}</option>
                   <option value="fail">{t('projectViewer.resultFail', 'Fail')}</option>
                   <option value="blocked">{t('projectViewer.resultBlocked', 'Blocked')}</option>
@@ -462,13 +466,14 @@ export default function ProjectViewerPage() {
                 </select>
 
                 <select
-                  className="form-control"
-                  style={{ width: 135, height: 36, fontSize: 13 }}
+                  className="form-control filter-select"
+                  style={{ height: 36, fontSize: 13, color: selectedPriority ? 'var(--foreground)' : 'var(--foreground-muted)' }}
                   value={selectedPriority}
                   onChange={e => setSelectedPriority(e.target.value)}
                   id="filter-priority-select"
                 >
-                  <option value="">{t('projectViewer.allPriorities', 'All Priorities')}</option>
+                  <option value="" disabled hidden>{t('common.priority', 'Priority')}</option>
+                  <option value="">{t('common.all', 'All')}</option>
                   <option value="critical">{t('projectViewer.priorityCritical', 'Critical')}</option>
                   <option value="high">{t('projectViewer.priorityHigh', 'High')}</option>
                   <option value="medium">{t('projectViewer.priorityMedium', 'Medium')}</option>

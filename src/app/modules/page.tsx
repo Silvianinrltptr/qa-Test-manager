@@ -154,7 +154,7 @@ export default function ModulesPage() {
         </div>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 20, alignItems: 'start' }}>
+      <div className="modules-grid">
         {/* Module list */}
         <div>
           <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600, color: 'var(--foreground-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
